@@ -3,24 +3,31 @@
 library(tidyverse)
 library(StatsBombR)
 Comps <- FreeCompetitions()
-Comps <- Comps %>%
+comps_shots <- Comps %>%
   filter(
     competition_gender == 'male',
     !competition_name %in% c('FIFA U20 World Cup', 'Indian Super league', 'Major League Soccer', 'North American League')
   )
 
 Matches <- FreeMatches(Comps)
-Matches <- Matches %>%
-  filter(year(match_date) >= 2000)
-StatsBombData <- free_allevents(MatchesDF = Matches, Parallel = T)
-StatsBombData = allclean(StatsBombData)
 
-shots <- StatsBombData %>%
+Matches_Shots <- Matches
+
+Matches_Passes <- Matches %>%
+  filter(year(match_date) >= 2000)
+
+StatsBombData_Shots <- free_allevents(MatchesDF = Matches_Shots, Parallel = T)
+StatsBombData_Passes <- free_allevents(MatchesDF = Matches_Passes, Parallel = T)
+
+StatsBombData_Shots = allclean(StatsBombData_Shots)
+StatsBombData_Passes = allclean(StatsBombData_Passes)
+
+shots <- StatsBombData_Shots %>%
   filter(type.name == "Shot", !is.na(location)) %>%
   unnest_wider(location, names_sep = "_") %>%
   rename(x = location_1, y = location_2)
 
-passes <- StatsBombData %>%
+passes <- StatsBombData_Passes %>%
   filter(type.name == "Pass", !is.na(location)) %>%
   unnest_wider(location, names_sep = "_") %>%
   rename(x = location_1, y = location_2)
@@ -81,8 +88,8 @@ passes_clean <- passes %>%
     pass.end_y = pass.end_location_2
   )
 
-write_csv(shots, "shots.csv")
-write_csv(passes, "passes.csv")
+write_csv(shots_clean, "shots.csv")
+write_csv(passes_clean, "passes.csv")
 
 ### sample code i've used in the past below
 
