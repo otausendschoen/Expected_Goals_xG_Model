@@ -3,19 +3,57 @@
 library(tidyverse)
 library(StatsBombR)
 Comps <- FreeCompetitions()
-Comps = Comps %>%
-  filter(competition_gender == 'male')
-
-
+Comps <- Comps %>%
+  filter(
+    competition_gender == 'male',
+    !competition_name %in% c('FIFA U20 World Cup', 'Indian Super league', 'Major League Soccer', 'North American League')
+  )
 
 Matches <- FreeMatches(Comps)
+Matches <- Matches %>%
+  filter(year(match_date) >= 2000)
 StatsBombData <- free_allevents(MatchesDF = Matches, Parallel = T)
 StatsBombData = allclean(StatsBombData)
 
-StatsBombData <- StatsBombData %>%
-  filter(type.name == "Shot")
+shots <- StatsBombData %>%
+  filter(type.name == "Shot", !is.na(location)) %>%
+  unnest_wider(location, names_sep = "_") %>%
+  rename(x = location_1, y = location_2)
 
-write_csv(StatsBombData, "shots_data.csv")
+passes <- StatsBombData %>%
+  filter(type.name == "Pass", !is.na(location)) %>%
+  unnest_wider(location, names_sep = "_") %>%
+  rename(x = location_1, y = location_2)
+
+shots <- shots %>%
+  left_join(
+    Matches %>%
+      select(match_id, match_date),
+    by = "match_id"
+  ) %>%
+  left_join(
+    Comps %>%
+      select(competition_id, season_id, competition_name, season_name),
+    by = c("competition_id", "season_id")
+  ) %>%
+  mutate(match_date = as.Date(match_date))
+
+passes <- passes %>%
+  left_join(
+    Matches %>%
+      select(match_id, match_date),
+    by = "match_id"
+  ) %>%
+  left_join(
+    Comps %>%
+      select(competition_id, season_id, competition_name, season_name),
+    by = c("competition_id", "season_id")
+  ) %>%
+  mutate(match_date = as.Date(match_date))
+
+
+write_csv(shots, "shots.csv")
+write_csv(passes, "passes.csv")
 
 ### sample code i've used in the past below
 
