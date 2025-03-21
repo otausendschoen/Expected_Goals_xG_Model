@@ -38,6 +38,21 @@ shots <- shots %>%
   ) %>%
   mutate(match_date = as.Date(match_date))
 
+shots_clean <- shots %>%
+  select(
+    -carry.end_location,
+    -goalkeeper.end_location,
+    -tactics.lineup,
+    -related_events,
+    -shot.freeze_frame,
+    -pass.end_location
+  ) %>%
+  unnest_wider(shot.end_location, names_sep = "_") %>%
+  rename(
+    shot.end_x = shot.end_location_1,
+    shot.end_y = shot.end_location_2
+  )
+
 passes <- passes %>%
   left_join(
     Matches %>%
@@ -51,6 +66,20 @@ passes <- passes %>%
   ) %>%
   mutate(match_date = as.Date(match_date))
 
+passes_clean <- passes %>%
+  select(
+    -carry.end_location,
+    -goalkeeper.end_location,
+    -tactics.lineup,
+    -related_events,
+    -shot.end_location,
+    -shot.freeze_frame
+  ) %>%
+  unnest_wider(pass.end_location, names_sep = "_") %>%
+  rename(
+    pass.end_x = pass.end_location_1,
+    pass.end_y = pass.end_location_2
+  )
 
 write_csv(shots, "shots.csv")
 write_csv(passes, "passes.csv")
