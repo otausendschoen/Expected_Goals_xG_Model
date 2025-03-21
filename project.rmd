@@ -10,11 +10,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-# Asssigment 1/3
-
-## Set up: Data & Libraries
-
-Firstly, we import the data.
 
 ```{r, include = F}
 library(sf)
@@ -23,14 +18,171 @@ library(tidyverse)
 library(dplyr)
 library(gdistance)
 library(terra)
-
 library(exactextractr)
+library(lubridate)
+
+#devtools::install_github("statsbomb/StatsBombR")
+library(tidyverse)
+library(StatsBombR)
 
 ```
+
+
+# Pipeline
+
+Research question: 
+
+How do shots behave over time? Do they get more short distanced?
+
+We can also apply this to passes: Are they safer, 
+
+
+Can we develop an expected goal model
+
+## Shot chart
+
+We will analyze the location of shots in different competitions and time periods.
+By calculating the distance of each shot to the goal, we can track whether players are shooting from shorter or longer distances over time.
+## 
+# Introduction
+
+As football enthusiasts, we are keen on analyzing games in great depth. Fortunately, the growing availability of open football data provides many opportunities to do so. This was one of the main motivations for our project.
+We set out to explore how shots have evolved over time, and whether we could build our own expected goals (xG) model — a tool widely used in football analytics to estimate the probability of a shot resulting in a goal.
+
+To do this, we use open-access data provided by StatsBomb which includes detailed event-level information of football matches of different competition. It also contains StatsBomb’s own xG estimates. This allows us to compare our model’s predictions with this already established estimate.
+
+Ultimately, our goal is to test the hypothesis that closer shots have a higher chance of resulting in goals, and to see whether this insight is reflected in trends over time. In other words: are teams becoming more conservative, favoring high-probability chances over long-range efforts?
+In the end, we might see this being reflected in our xG model. The code for this projec can also be found  on [GitHub](https://github.com/otausendschoen/Football_Analysis).
+
+
+
+
+## Set up: Data & Libraries
+
+For this project, we will rely on the pacakge StasBomb. This package gives us access to detailed, event-level football data — including passes, shots, dribbles, and more — from professional matches around the world.
+
+In general, the package is used in the follwoing way:
+
+- Load a set of competitions and matches
+- Download all event data for those matches
+- Do analysis on subsets of this data. For example, we will start analyzing how shots behave over time below.
+
+
+In general, we can use the following code to obtain the data via the package's API. However, the dataset is very big so we decided to attach it as a csv. This is why this is commented out.
+```{r}
+#Comps <- FreeCompetitions()
+#Matches <- FreeMatches(Comps)
+#StatsBombData <- free_allevents(MatchesDF = Matches, Parallel = T)
+#StatsBombData = allclean(StatsBombData)
+
+```
+
+PRELIMINARY SUBSET TO SPEED UP PROCESS:
+```{r}
+seasons <- c("2012", "2013", "2014", "2015", "2016", "2017", "2018")
+Comps <- FreeCompetitions()
+Comps_subset <- Comps %>%
+  filter(competition_name == "La Liga", season_name %in% c("2017/2018", "2018/2019"))
+Matches <- FreeMatches(Comps_subset)
+
+StatsBombData <- free_allevents(MatchesDF = Matches, Parallel = TRUE)
+
+# Clean data
+StatsBombData <- allclean(StatsBombData)
+
+# Filter for shots
+shots <- StatsBombData %>%
+  filter(type.name == "Shot")
+```
+
+
+The dataset below already is already filtered for the specific e
+```{r}
+Shots<-read.csv("shots_data.csv")
+
+```
+
+## Data Exploration
+
+
+Before adressing our reserach question, we shall do some some preliminary data exploration to understand and get an overview of the data.
 
 ```{r}
+head(shots)
 
-sf.pop <- st_read("Geo_3_data/ne_10m_populated_places")
-sf.world <- world
-sf.roads<-st_read("Geo_3_data/ne_10m_roads")
+shots %>%
+  summarise(
+    avg_x = mean(location.x, na.rm = TRUE),
+    avg_y = mean(location.y, na.rm = TRUE)
+  )
+
 ```
+
+StatsBomb uses a standard pitch coordinate system where:
+
+- The field is 120 units long (from goal to goal, along the x-axis).
+- The field is 80 units wide (from sideline to sideline, along the y-axis).
+- The center of the opponent’s goal is at (120, 40): 
+
+```{r}
+calculate_shot_distance <- function(x, y) {
+  sqrt((120 - x)^2 + (40 - y)^2)
+}
+shots <- shots %>%
+  mutate(shot_distance = calculate_shot_distance(location.x, location.y))
+
+hist(shots$shot_distance, breaks = 30, main = "Shot Distance Distribution", xlab = "Distance to Goal (yards approx.)")
+
+shots %>%
+  count(shot.outcome.name, sort = TRUE) %>%
+  print(n = Inf)
+
+shots %>%
+  count(player.name, sort = TRUE) %>%
+  slice_max(n, n = 10) %>%
+  ggplot(aes(x = reorder(player.name, n), y = n)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 10 Players by Shot Volume", x = "Player", y = "Shots")
+
+```
+
+Most importantly, the histogram shows how far most shots are taken from the goal. We observe a clear peak at shorter distances, indicating that many shots come from inside or near the penalty box. However, there are also a number of longer-range attempts, suggesting variation in shooting strategy across players or teams.
+
+Let's plot this over time:
+```{r}
+shots <- shots %>%
+  left_join(dplyr::select(Matches, match_id, match_date), by = "match_id")
+
+# Extract the year from match_date
+shots <- shots %>%
+  mutate(match_year = year(match_date))
+```
+
+
+```{r}
+avg_distance_by_year <- shots %>%
+  group_by(match_year) %>%
+  summarise(
+    avg_shot_distance = mean(shot_distance, na.rm = TRUE),
+    shot_count = n()
+  ) %>%
+  filter(!is.na(match_year))
+
+# Plot
+ggplot(avg_distance_by_year, aes(x = match_year, y = avg_shot_distance)) +
+  geom_line(size = 1.2, color = "darkred") +
+  geom_point(size = 2, color = "black") +
+  labs(
+    title = "Average Shot Distance Over Time",
+    x = "Year",
+    y = "Average Distance to Goal (in pitch units)"
+  ) +
+  theme_minimal()
+
+```
+
+Next, we plot a few heatmaps in specific year to compare this in a bit more intuitive way over time.
+
+
+
