@@ -191,7 +191,9 @@ shots <- shots %>%
     possession_team.name,
     player.id,
     player.name,
+    #position.id,
     position.name,
+    #play_pattern.id,
     play_pattern.name,
     under_pressure,
     location.x,
@@ -202,9 +204,13 @@ shots <- shots %>%
     shot.end_location_3,
     shot_impact_height,
     shot.statsbomb_xg,
+    #shot.outcome.id,
     shot.outcome.name,
+    #shot.technique.id,
     shot.technique.name,
+    #shot.body_part.id,
     shot.body_part.name,
+    #shot.type.id,
     shot.type.name,
     shot.aerial_won,
     shot.redirect,
@@ -297,7 +303,7 @@ calculate_pass_distance <- function(x1, y1, x2, y2) {
 }
 
 passes <- passes %>%
-  mutate(pass_distance_m = calculate_pass_distance(location.x, location.y, pass.end_x, pass.end_y))
+  mutate(pass_distance = calculate_pass_distance(location.x, location.y, pass.end_x, pass.end_y))
 
 ```
 
@@ -320,27 +326,30 @@ passes %>%
   mutate(pass.outcome.name = replace_na(pass.outcome.name, "Complete")) %>%
   group_by(pass.outcome.name) %>%
   summarise(
-    avg_distance = mean(pass_distance_m, na.rm = TRUE),
+    avg_distance = mean(pass_distance, na.rm = TRUE),
     count = n()
   ) %>%
   arrange(avg_distance)
 
 ```
 
-Similarly, the average distance for completed passes is much, much shorter, than passes that are not completed.
+Similarly, the average distance for completed passes is much, much shorter, than passes that are not completed. Our documentation from StatsBomb states that all completed passes have a null outcome name, so we input the completed pass value in this step as well.
 
 
 ```{r}
 
-hist(shots$shot_distance, breaks = 30, main = "Shot Distance Distribution", xlab = "Distance to Goal (yards approx.)")
+hist(shots$shot_distance, breaks = 30, main = "Shot Distance Distribution", xlab = "Distance to Goal (meters)")
 
+```
+
+``` {r}
 shots %>%
   count(player.name, sort = TRUE) %>%
   slice_max(n, n = 10) %>%
   ggplot(aes(x = reorder(player.name, n), y = n)) +
   geom_col(fill = "steelblue") +
   coord_flip() +
-  labs(title = "Top 10 Players by Shot Volume", x = "Player", y = "Shots")
+  labs(title = "Top 10 Players by Total Shot Volume", x = "Player", y = "Shots")
 
 ```
 
@@ -348,9 +357,9 @@ Most importantly, the histogram shows how far most shots are taken from the goal
 
 We can do the same for the pass distances.
 ```{r}
-hist(passes$pass_distance_m, breaks = 50,
+hist(passes$pass_distance, breaks = 50,
      main = "Distribution of Pass Distances",
-     xlab = "Pass Distance (m)",
+     xlab = "Pass Distance (meters)",
      col = "lightblue", border = "white")
 ```
 
@@ -359,7 +368,16 @@ Let's plot this over time:
 For convenience, we include a trendline using LOESS (Locally Estimated Scatterplot Smoothing), regression method that captures the underlying trend - without assuming a strictly linear relationship.
 
 ```{r}
-ggplot(avg_distance_by_year, aes(x = season_name, y = avg_shot_distance, group = 1)) +
+
+avg_shot_distance_by_year <- shots %>%
+  group_by(season_name) %>%
+  summarise(
+    avg_shot_distance = mean(shot_distance, na.rm = TRUE),
+    shot_count = n()
+  ) %>%
+  filter(!is.na(season_name))
+
+ggplot(avg_shot_distance_by_year, aes(x = season_name, y = avg_shot_distance, group = 1)) +
   geom_line(size = 1.2, color = "darkred") +
   geom_point(size = 2, color = "black") +
   geom_smooth(method = "loess", se = FALSE, color = "steelblue", linetype = "dashed") +
@@ -382,7 +400,7 @@ The plot for the average distance of passes can also be seen below but it is not
 avg_pass_distance_by_year <- passes %>%
   group_by(season_name) %>%
   summarise(
-    avg_pass_distance = mean(pass_distance_m, na.rm = TRUE),
+    avg_pass_distance = mean(pass_distance, na.rm = TRUE),
     pass_count = n()
   ) %>%
   filter(!is.na(season_name))
@@ -421,10 +439,10 @@ ggplot(shots, aes(x = shot_distance)) +
 
 ```
 
-However, the trend i smore difficult to observe here. We can sede how each season has a different pattern/shape and there is no universal rulle or distribution that applies to all seasons.
+However, the trend is more difficult to observe here. We can see how each season has a different pattern/shape and there is no universal rule or distribution that applies to all seasons.
 
 ```{r}
-ggplot(passes, aes(x = pass_distance_m)) +
+ggplot(passes, aes(x = pass_distance)) +
   geom_density(fill = "lightblue") +
   facet_wrap(~season_name) +
   labs(
@@ -439,13 +457,77 @@ ggplot(passes, aes(x = pass_distance_m)) +
   )
 
 ```
-For passes on the other hand, it is way more obvious. We can definitely see that short passes are more likeliy in the 2023/2024 season than in the 2015/2016 season!
 
-
-
-
+For passes on the other hand, it is way more obvious. We can definitely see that short passes are more likely in the 2023/2024 season than in the 2015/2016 season!
 
 Next, we plot a few heatmaps in specific year to compare this in a bit more intuitive way over time.
 
+``` {r}
 
+#insert heatmap code here
+
+```
+
+Now, we'll create an expected goals model, to assess the likelihood of scoring a goal based on pre-shot information
+
+``` {r}
+
+xg_df <- shots %>%
+  dplyr::select(shot.outcome.name,
+         play_pattern.name,
+         under_pressure,
+         location.x,
+         location.y,
+         shot_distance,
+         shot.technique.name,
+         shot.body_part.name,
+         shot.type.name,
+         shot.aerial_won,
+         shot.follows_dribble,
+         shot.first_time,
+         shot.open_goal,
+         location.x.GK,
+         location.y.GK,
+         AngleToGoal,
+         AngleToKeeper,
+         AngleDeviation
+         ) %>%
+  mutate(is_goal = shot.outcome.name == "Goal") %>%  # creates TRUE/FALSE
+  dplyr::select(is_goal, everything(), -shot.outcome.name)  # moves is_goal to the first column
+
+```
+
+Next we perform categorical encoding on our columns that contain string values.
+``` {r}
+
+insert_one_hot <- function(df, col_name) {
+  # Create dummy variables (as a data frame)
+  dummies <- as.data.frame(model.matrix(~ . - 1, data = df[col_name]))
+  
+  # Clean up column names
+  colnames(dummies) <- gsub(paste0("^", col_name), col_name, colnames(dummies))
+  colnames(dummies) <- gsub(" ", ".", colnames(dummies))  # Replace spaces if needed
+  
+  # Get the original column position
+  pos <- which(names(df) == col_name)
+  
+  # Build new df: before, dummies, after
+  df_new <- bind_cols(
+    df[1:(pos - 1)],
+    dummies,
+    df[(pos + 1):ncol(df)]
+  )
+  
+  return(df_new)
+}
+
+xg_df_encoded <- xg_df  # make a copy to preserve original
+
+cols_to_encode <- c("play_pattern.name", "shot.technique.name", "shot.body_part.name", "shot.type.name")
+
+for (col in cols_to_encode) {
+  xg_df_encoded <- insert_one_hot(xg_df_encoded, col)
+}
+
+```
 
