@@ -28,22 +28,9 @@ library(StatsBombR)
 ```
 
 
-# Pipeline
-
-Research question: 
-
-How do shots behave over time? Do they get more short distanced?
-
-We can also apply this to passes: Are they safer, 
 
 
-Can we develop an expected goal model
 
-## Shot chart
-
-We will analyze the location of shots in different competitions and time periods.
-By calculating the distance of each shot to the goal, we can track whether players are shooting from shorter or longer distances over time.
-## 
 # Introduction
 
 As football enthusiasts, we are keen on analyzing games in great depth. Fortunately, the growing availability of open football data provides many opportunities to do so. This was one of the main motivations for our project.
@@ -57,7 +44,7 @@ In the end, we might see this being reflected in our xG model. The code for this
 
 
 
-## Set up: Data & Libraries
+# Set up: Data & Libraries
 
 For this project, we will rely on the pacakge StasBomb. This package gives us access to detailed, event-level football data — including passes, shots, dribbles, and more — from professional matches around the world.
 
@@ -69,73 +56,142 @@ In general, the package is used in the follwoing way:
 
 
 In general, we can use the following code to obtain the data via the package's API. However, the dataset is very big so we decided to attach it as a csv. This is why this is commented out.
+
+---INSERT TIRDODS CODE USED TO GET DATA, COMMENTED OUT---
+
+The dataset below already is already filtered for the specific seasons, competition we use. It is important to note that the data for passes only includes 2 seasons for computational efficiency as it already includes about 2 million observations.
 ```{r}
-#Comps <- FreeCompetitions()
-#Matches <- FreeMatches(Comps)
-#StatsBombData <- free_allevents(MatchesDF = Matches, Parallel = T)
-#StatsBombData = allclean(StatsBombData)
+shots<-read.csv("shots.csv")
+passes<-read.csv("passes.csv/passes.csv")
 
 ```
-
-PRELIMINARY SUBSET TO SPEED UP PROCESS:
-```{r}
-seasons <- c("2012", "2013", "2014", "2015", "2016", "2017", "2018")
-Comps <- FreeCompetitions()
-Comps_subset <- Comps %>%
-  filter(competition_name == "La Liga", season_name %in% c("2017/2018", "2018/2019"))
-Matches <- FreeMatches(Comps_subset)
-
-StatsBombData <- free_allevents(MatchesDF = Matches, Parallel = TRUE)
-
-# Clean data
-StatsBombData <- allclean(StatsBombData)
-
-# Filter for shots
-shots <- StatsBombData %>%
-  filter(type.name == "Shot")
-```
-
-
-The dataset below already is already filtered for the specific e
-```{r}
-Shots<-read.csv("shots_data.csv")
-
-```
-
-## Data Exploration
 
 
 Before adressing our reserach question, we shall do some some preliminary data exploration to understand and get an overview of the data.
 
 ```{r}
-head(shots)
+head(shots[, -c(1,2,3)])
+```
 
-shots %>%
-  summarise(
-    avg_x = mean(location.x, na.rm = TRUE),
-    avg_y = mean(location.y, na.rm = TRUE)
+
+
+As we can see, there are in total 186 columns and 12720 observations. These observations are all seasons for most tournamens but filtered for only shots. The observations for passes on the other hand can be found in the other dataset.
+
+Before we start the analysis, we do some basic data pre processing and also remove some of these redundant 186 columns that we do not require.
+
+## Data pre-processing
+
+```{r}
+
+
+shots <- shots %>%
+  dplyr::select(
+    id,
+    match_id,
+    season_name,
+    timestamp,
+    minute,
+    second,
+    period,
+    possession_team.name,
+    team.name,
+    player.name,
+    position.name,
+    x,
+    y,
+    shot.end_x,
+    shot.end_y,
+    shot.statsbomb_xg,
+    shot.outcome.name,
+    shot.technique.name,
+    shot.body_part.name,
+    shot.type.name,
+    play_pattern.name,
+    under_pressure
+  )
+
+passes<- passes%>%
+  dplyr::select(
+        id,
+    match_id,
+    season_name,
+    timestamp,
+    minute,
+    second,
+    period,
+    possession_team.name,
+    team.name,
+    player.name,
+    position.name,
+    x,
+    y,
+    pass.end_x,
+    pass.end_y,
+    pass.outcome.name,
+    under_pressure
+
   )
 
 ```
 
+
+To make life easier in the next sections, we calulate the shot distance form player to goal.
 StatsBomb uses a standard pitch coordinate system where:
 
 - The field is 120 units long (from goal to goal, along the x-axis).
 - The field is 80 units wide (from sideline to sideline, along the y-axis).
 - The center of the opponent’s goal is at (120, 40): 
+- 120 StatsBomb units ≈ 105 meters → 1 unit ≈ 0.875 meters
 
 ```{r}
 calculate_shot_distance <- function(x, y) {
-  sqrt((120 - x)^2 + (40 - y)^2)
-}
+  sqrt((120 - x)^2 + (40 - y)^2) * (105 / 120)}
 shots <- shots %>%
-  mutate(shot_distance = calculate_shot_distance(location.x, location.y))
+  mutate(shot_distance = calculate_shot_distance(x, y))
+
+```
+
+We do the same for the distance for the distance of the passes, from player to player.
+
+```{r}
+calculate_pass_distance <- function(x1, y1, x2, y2) {
+  sqrt((x2 - x1)^2 + (y2 - y1)^2) * (105 / 120)
+}
+
+passes <- passes %>%
+  mutate(pass_distance_m = calculate_pass_distance(x, y, pass.end_x, pass.end_y))
+
+```
+
+
+## Data exploration
+
+```{r}
+shots %>%
+  group_by(shot.outcome.name) %>%
+  summarise(avg_distance = mean(shot_distance, na.rm = TRUE),
+            count = n()) %>%
+  arrange(avg_distance)
+
+```
+```{r}
+passes %>%
+  group_by(pass.outcome.name) %>%
+  summarise(avg_distance = mean(pass_distance_m, na.rm = TRUE), count = n()) %>%
+  arrange(avg_distance)
+
+```
+
+
+
+We can already confirm a bit our suspicions with this table. The average distance when scoring a goal is way lower compared to the other shot outcomes such as being blocked or being saved.
+
+
+```{r}
 
 hist(shots$shot_distance, breaks = 30, main = "Shot Distance Distribution", xlab = "Distance to Goal (yards approx.)")
 
-shots %>%
-  count(shot.outcome.name, sort = TRUE) %>%
-  print(n = Inf)
+
 
 shots %>%
   count(player.name, sort = TRUE) %>%
@@ -148,41 +204,108 @@ shots %>%
 ```
 
 Most importantly, the histogram shows how far most shots are taken from the goal. We observe a clear peak at shorter distances, indicating that many shots come from inside or near the penalty box. However, there are also a number of longer-range attempts, suggesting variation in shooting strategy across players or teams.
+We can do the same for the pass distances.
+```{r}
+hist(passes$pass_distance_m, breaks = 50,
+     main = "Distribution of Pass Distances",
+     xlab = "Pass Distance (m)",
+     col = "lightblue", border = "white")
+```
+
+
 
 Let's plot this over time:
-```{r}
-shots <- shots %>%
-  left_join(dplyr::select(Matches, match_id, match_date), by = "match_id")
 
-# Extract the year from match_date
-shots <- shots %>%
-  mutate(match_year = year(match_date))
-```
-
+For convenience, we include a trendline using LOESS (Locally Estimated Scatterplot Smoothing), regression method that captures the underlying trend - without assuming a strictly linear relationship.
 
 ```{r}
-avg_distance_by_year <- shots %>%
-  group_by(match_year) %>%
-  summarise(
-    avg_shot_distance = mean(shot_distance, na.rm = TRUE),
-    shot_count = n()
-  ) %>%
-  filter(!is.na(match_year))
-
-# Plot
-ggplot(avg_distance_by_year, aes(x = match_year, y = avg_shot_distance)) +
+ggplot(avg_distance_by_year, aes(x = season_name, y = avg_shot_distance, group = 1)) +
   geom_line(size = 1.2, color = "darkred") +
   geom_point(size = 2, color = "black") +
+  geom_smooth(method = "loess", se = FALSE, color = "steelblue", linetype = "dashed") +
   labs(
     title = "Average Shot Distance Over Time",
-    x = "Year",
+    x = "Season",
     y = "Average Distance to Goal (in pitch units)"
   ) +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ```
+
+This plot shows how most shots are not within the penalty or 11m box from the goal line. Interestingly, we can see how the shot distance started to increase on average from 1970 onwords. HOwever, the trend seems to have "stabilized at around 19 meter, indicating a potential tactical equilibrium — where players still attempt long-range shots, but the majority of efforts come from a more optimal shooting range. It will be interesting to see if we also observe this in our xG model.
+
+
+The plot for the average distance of passes can also be seen below but it is not as meaningful as we only have data for 2 seasons. We can see a sharp decrease in distance.
+
+```{r}
+avg_pass_distance_by_year <- passes %>%
+  group_by(season_name) %>%
+  summarise(
+    avg_pass_distance = mean(pass_distance_m, na.rm = TRUE),
+    pass_count = n()
+  ) %>%
+  filter(!is.na(season_name))
+
+ggplot(avg_pass_distance_by_year, aes(x = season_name, y = avg_pass_distance, group = 1)) +
+  geom_line(size = 1.2, color = "darkgreen") +
+  geom_point(size = 2, color = "black") +
+  geom_smooth(method = "loess", se = FALSE, color = "steelblue", linetype = "dashed") +
+  labs(
+    title = "Average Pass Distance Over Time",
+    x = "Season",
+    y = "Average Pass Distance (m)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+We will observe this more closely by taking a look at the distribution of each year. For this, we create a density plot faceted by season below.
+
+
+```{r}
+ggplot(shots, aes(x = shot_distance)) +
+  geom_density(fill = "lightblue") +
+  facet_wrap(~season_name) +  # no `scales = "free_y"`
+  labs(
+    title = "Distribution of Shot Distances per Season",
+    x = "Shot Distance (m)",
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 6),
+    strip.text = element_text(size = 8)
+  )
+
+```
+
+However, the trend i smore difficult to observe here. We can sede how each season has a different pattern/shape and there is no universal rulle or distribution that applies to all seasons.
+
+```{r}
+ggplot(passes, aes(x = pass_distance_m)) +
+  geom_density(fill = "lightblue") +
+  facet_wrap(~season_name) +
+  labs(
+    title = "Distribution of Pass Distances per Season",
+    x = "Pass Distance (m)",
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 6),
+    strip.text = element_text(size = 8)
+  )
+
+```
+For passes on the other hand, it is way more obvious. We can definitely see that short passes are more likeliy in the 2023/2024 season than in the 2015/2016 season!
+
+
+
+
 
 Next, we plot a few heatmaps in specific year to compare this in a bit more intuitive way over time.
 
-test
+
 
