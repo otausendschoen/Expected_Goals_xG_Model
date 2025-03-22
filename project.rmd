@@ -59,23 +59,116 @@ In general, we can use the following code to obtain the data via the package's A
 
 ---INSERT TIRDODS CODE USED TO GET DATA, COMMENTED OUT---
 
-The dataset below already is already filtered for the specific seasons, competition we use. It is important to note that the data for passes only includes 2 seasons for computational efficiency as it already includes about 2 million observations.
-```{r}
-shots<-read.csv("shots.csv")
-passes<-read.csv("passes.csv/passes.csv")
+``` {r}
+
+# #Pulling StatsBomb Free Data Into R
+# library(tidyverse)
+# library(StatsBombR)
+# Comps <- FreeCompetitions()
+# comps_shots <- Comps %>%
+#   filter(
+#     competition_gender == 'male',
+#     !competition_name %in% c('FIFA U20 World Cup', 'Indian Super league', 'Major League Soccer', 'North American League')
+#   )
+# 
+# Matches <- FreeMatches(Comps)
+# 
+# Matches_Shots <- Matches
+# 
+# Matches_Passes <- Matches %>%
+#   filter(year(match_date) >= 2000)
+# 
+# StatsBombData_Shots <- free_allevents(MatchesDF = Matches_Shots, Parallel = T)
+# StatsBombData_Passes <- free_allevents(MatchesDF = Matches_Passes, Parallel = T)
+# 
+# StatsBombData_Shots = allclean(StatsBombData_Shots)
+# StatsBombData_Passes = allclean(StatsBombData_Passes)
+# 
+# shots <- StatsBombData_Shots %>%
+#   filter(type.name == "Shot", !is.na(location)) %>%
+#   unnest_wider(location, names_sep = "_") %>%
+#   rename(x = location_1, y = location_2)
+# 
+# passes <- StatsBombData_Passes %>%
+#   filter(type.name == "Pass", !is.na(location)) %>%
+#   unnest_wider(location, names_sep = "_") %>%
+#   rename(x = location_1, y = location_2)
+# 
+# shots <- shots %>%
+#   left_join(
+#     Matches %>%
+#       select(match_id, match_date),
+#     by = "match_id"
+#   ) %>%
+#   left_join(
+#     Comps %>%
+#       select(competition_id, season_id, competition_name, season_name),
+#     by = c("competition_id", "season_id")
+#   ) %>%
+#   mutate(match_date = as.Date(match_date))
+# 
+# shots_clean <- shots %>%
+#   select(
+#     -carry.end_location,
+#     -goalkeeper.end_location,
+#     -tactics.lineup,
+#     -related_events,
+#     -shot.freeze_frame,
+#     -pass.end_location
+#   ) %>%
+#   unnest_wider(shot.end_location, names_sep = "_") %>%
+#   rename(
+#     shot.end_x = shot.end_location_1,
+#     shot.end_y = shot.end_location_2
+#   )
+# 
+# passes <- passes %>%
+#   left_join(
+#     Matches %>%
+#       select(match_id, match_date),
+#     by = "match_id"
+#   ) %>%
+#   left_join(
+#     Comps %>%
+#       select(competition_id, season_id, competition_name, season_name),
+#     by = c("competition_id", "season_id")
+#   ) %>%
+#   mutate(match_date = as.Date(match_date))
+# 
+# passes_clean <- passes %>%
+#   select(
+#     -carry.end_location,
+#     -goalkeeper.end_location,
+#     -tactics.lineup,
+#     -related_events,
+#     -shot.end_location,
+#     -shot.freeze_frame
+#   ) %>%
+#   unnest_wider(pass.end_location, names_sep = "_") %>%
+#   rename(
+#     pass.end_x = pass.end_location_1,
+#     pass.end_y = pass.end_location_2
+#   )
+# 
+# write_csv(shots_clean, "shots.csv")
+# write_csv(passes_clean, "passes.csv")
 
 ```
 
+The dataset below already is already filtered for the specific seasons, competition we use. It is important to note that the data for passes only includes 2 specific seasons for computational efficiency as it already includes about 200,000 observations.
 
-Before adressing our reserach question, we shall do some some preliminary data exploration to understand and get an overview of the data.
+```{r}
+shots<-read.csv("shots.csv")
+passes <- read_csv(unz("passes.csv.zip", "passes.csv"))
+```
+
+Before addressing our research question, we shall do some some preliminary data exploration to understand and get an overview of the data.
 
 ```{r}
 head(shots[, -c(1,2,3)])
 ```
 
-
-
-As we can see, there are in total 186 columns and 12720 observations. These observations are all seasons for most tournamens but filtered for only shots. The observations for passes on the other hand can be found in the other dataset.
+As we can see, there are in total 186 columns and 12720 observations. These observations are all seasons for most tournaments but filtered for only shots. The observations for passes on the other hand can be found in the other dataset.
 
 Before we start the analysis, we do some basic data pre processing and also remove some of these redundant 186 columns that we do not require.
 
@@ -88,32 +181,54 @@ shots <- shots %>%
   dplyr::select(
     id,
     match_id,
+    competition_name,
     season_name,
     timestamp,
     minute,
     second,
     period,
-    possession_team.name,
     team.name,
+    possession_team.name,
+    player.id,
     player.name,
     position.name,
-    x,
-    y,
+    play_pattern.name,
+    under_pressure,
+    location.x,
+    location.y,
     shot.end_x,
     shot.end_y,
+    shot.end_location.z,
+    shot.end_location_3,
+    shot_impact_height,
     shot.statsbomb_xg,
     shot.outcome.name,
     shot.technique.name,
     shot.body_part.name,
     shot.type.name,
-    play_pattern.name,
-    under_pressure
+    shot.aerial_won,
+    shot.redirect,
+    shot.follows_dribble,
+    shot.first_time,
+    shot.open_goal,
+    shot.deflected,
+    shot.redirect,
+    player.id.GK,
+    player.name.GK,
+    shot.saved_off_target,
+    shot.saved_to_post,
+    location.x.GK,
+    location.y.GK,
+    AngleToGoal,
+    AngleToKeeper,
+    AngleDeviation
   )
 
 passes<- passes%>%
   dplyr::select(
         id,
     match_id,
+    competition_name,
     season_name,
     timestamp,
     minute,
@@ -121,21 +236,43 @@ passes<- passes%>%
     period,
     possession_team.name,
     team.name,
+    player.id,
     player.name,
     position.name,
-    x,
-    y,
-    pass.end_x,
-    pass.end_y,
-    pass.outcome.name,
-    under_pressure
-
+    play_pattern.name,
+    under_pressure,
+    location.x,
+    location.y,
+    pass.length, 
+    pass.angle, 
+    pass.end_x, 
+    pass.end_y, 
+    pass.aerial_won, 
+    pass.switch, 
+    pass.cross, 
+    pass.assisted_shot_id, 
+    pass.shot_assist, 
+    pass.inswinging, 
+    pass.deflected, 
+    pass.outswinging, 
+    pass.through_ball, 
+    pass.cut_back, 
+    pass.goal_assist, 
+    pass.recipient.id, 
+    pass.recipient.name, 
+    pass.height.name, 
+    pass.body_part.name, 
+    pass.type.name, 
+    pass.outcome.name, 
+    pass.technique.name, 
+    ball_receipt.outcome.name,
+    pass.no_touch
   )
 
 ```
 
 
-To make life easier in the next sections, we calulate the shot distance form player to goal.
+To make life easier in the next sections, we calculate the shot distance from player to goal.
 StatsBomb uses a standard pitch coordinate system where:
 
 - The field is 120 units long (from goal to goal, along the x-axis).
@@ -146,8 +283,9 @@ StatsBomb uses a standard pitch coordinate system where:
 ```{r}
 calculate_shot_distance <- function(x, y) {
   sqrt((120 - x)^2 + (40 - y)^2) * (105 / 120)}
+
 shots <- shots %>%
-  mutate(shot_distance = calculate_shot_distance(x, y))
+  mutate(shot_distance = calculate_shot_distance(location.x, location.y))
 
 ```
 
@@ -159,7 +297,7 @@ calculate_pass_distance <- function(x1, y1, x2, y2) {
 }
 
 passes <- passes %>%
-  mutate(pass_distance_m = calculate_pass_distance(x, y, pass.end_x, pass.end_y))
+  mutate(pass_distance_m = calculate_pass_distance(location.x, location.y, pass.end_x, pass.end_y))
 
 ```
 
@@ -174,24 +312,27 @@ shots %>%
   arrange(avg_distance)
 
 ```
+
+We can already confirm a bit our suspicions with this table. The average distance when scoring a goal is way lower compared to the other shot outcomes such as being blocked or being saved.
+
 ```{r}
 passes %>%
+  mutate(pass.outcome.name = replace_na(pass.outcome.name, "Complete")) %>%
   group_by(pass.outcome.name) %>%
-  summarise(avg_distance = mean(pass_distance_m, na.rm = TRUE), count = n()) %>%
+  summarise(
+    avg_distance = mean(pass_distance_m, na.rm = TRUE),
+    count = n()
+  ) %>%
   arrange(avg_distance)
 
 ```
 
-
-
-We can already confirm a bit our suspicions with this table. The average distance when scoring a goal is way lower compared to the other shot outcomes such as being blocked or being saved.
+Similarly, the average distance for completed passes is much, much shorter, than passes that are not completed.
 
 
 ```{r}
 
 hist(shots$shot_distance, breaks = 30, main = "Shot Distance Distribution", xlab = "Distance to Goal (yards approx.)")
-
-
 
 shots %>%
   count(player.name, sort = TRUE) %>%
@@ -204,6 +345,7 @@ shots %>%
 ```
 
 Most importantly, the histogram shows how far most shots are taken from the goal. We observe a clear peak at shorter distances, indicating that many shots come from inside or near the penalty box. However, there are also a number of longer-range attempts, suggesting variation in shooting strategy across players or teams.
+
 We can do the same for the pass distances.
 ```{r}
 hist(passes$pass_distance_m, breaks = 50,
@@ -211,8 +353,6 @@ hist(passes$pass_distance_m, breaks = 50,
      xlab = "Pass Distance (m)",
      col = "lightblue", border = "white")
 ```
-
-
 
 Let's plot this over time:
 
