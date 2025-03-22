@@ -3,19 +3,93 @@
 library(tidyverse)
 library(StatsBombR)
 Comps <- FreeCompetitions()
-Comps = Comps %>%
-  filter(competition_gender == 'male')
-
-
+comps_shots <- Comps %>%
+  filter(
+    competition_gender == 'male',
+    !competition_name %in% c('FIFA U20 World Cup', 'Indian Super league', 'Major League Soccer', 'North American League')
+  )
 
 Matches <- FreeMatches(Comps)
-StatsBombData <- free_allevents(MatchesDF = Matches, Parallel = T)
-StatsBombData = allclean(StatsBombData)
 
-StatsBombData <- StatsBombData %>%
-  filter(type.name == "Shot")
+Matches_Shots <- Matches
 
-write_csv(StatsBombData, "shots_data.csv")
+Matches_Passes <- Matches %>%
+  filter(year(match_date) >= 2000)
+
+StatsBombData_Shots <- free_allevents(MatchesDF = Matches_Shots, Parallel = T)
+StatsBombData_Passes <- free_allevents(MatchesDF = Matches_Passes, Parallel = T)
+
+StatsBombData_Shots = allclean(StatsBombData_Shots)
+StatsBombData_Passes = allclean(StatsBombData_Passes)
+
+shots <- StatsBombData_Shots %>%
+  filter(type.name == "Shot", !is.na(location)) %>%
+  unnest_wider(location, names_sep = "_") %>%
+  rename(x = location_1, y = location_2)
+
+passes <- StatsBombData_Passes %>%
+  filter(type.name == "Pass", !is.na(location)) %>%
+  unnest_wider(location, names_sep = "_") %>%
+  rename(x = location_1, y = location_2)
+
+shots <- shots %>%
+  left_join(
+    Matches %>%
+      select(match_id, match_date),
+    by = "match_id"
+  ) %>%
+  left_join(
+    Comps %>%
+      select(competition_id, season_id, competition_name, season_name),
+    by = c("competition_id", "season_id")
+  ) %>%
+  mutate(match_date = as.Date(match_date))
+
+shots_clean <- shots %>%
+  select(
+    -carry.end_location,
+    -goalkeeper.end_location,
+    -tactics.lineup,
+    -related_events,
+    -shot.freeze_frame,
+    -pass.end_location
+  ) %>%
+  unnest_wider(shot.end_location, names_sep = "_") %>%
+  rename(
+    shot.end_x = shot.end_location_1,
+    shot.end_y = shot.end_location_2
+  )
+
+passes <- passes %>%
+  left_join(
+    Matches %>%
+      select(match_id, match_date),
+    by = "match_id"
+  ) %>%
+  left_join(
+    Comps %>%
+      select(competition_id, season_id, competition_name, season_name),
+    by = c("competition_id", "season_id")
+  ) %>%
+  mutate(match_date = as.Date(match_date))
+
+passes_clean <- passes %>%
+  select(
+    -carry.end_location,
+    -goalkeeper.end_location,
+    -tactics.lineup,
+    -related_events,
+    -shot.end_location,
+    -shot.freeze_frame
+  ) %>%
+  unnest_wider(pass.end_location, names_sep = "_") %>%
+  rename(
+    pass.end_x = pass.end_location_1,
+    pass.end_y = pass.end_location_2
+  )
+
+write_csv(shots_clean, "shots.csv")
+write_csv(passes_clean, "passes.csv")
 
 ### sample code i've used in the past below
 
