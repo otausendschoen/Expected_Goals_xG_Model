@@ -21,6 +21,7 @@ library(terra)
 library(exactextractr)
 library(lubridate)
 library(caret)
+library(ggrepel)
 
 #devtools::install_github("statsbomb/StatsBombR")
 library(tidyverse)
@@ -155,7 +156,7 @@ In general, we can use the following code to obtain the data via the package's A
 The dataset below already is already filtered for the specific seasons, competition we use. It is important to note that the data for passes only includes 2 specific seasons for computational efficiency as it already includes about 200,000 observations.
 
 ```{r}
-shots_df <- read.csv("shots.csv")
+shots_df <- read_csv(unz("shots_new.csv.zip", "shots_new.csv"))
 passes_df <- read_csv(unz("passes.csv.zip", "passes.csv"))
 ```
 
@@ -184,6 +185,7 @@ shots <- shots_df %>%
     minute,
     second,
     period,
+    team.id,
     team.name,
     possession_team.name,
     player.id,
@@ -197,9 +199,9 @@ shots <- shots_df %>%
     location.y,
     shot.end_x,
     shot.end_y,
-    shot.end_location.z,
-    shot.end_location_3,
-    shot_impact_height,
+    #shot.end_location.z,
+    #shot.end_location_3,
+    #shot_impact_height,
     shot.statsbomb_xg,
     #shot.outcome.id,
     shot.outcome.name,
@@ -217,15 +219,15 @@ shots <- shots_df %>%
     shot.deflected,
     shot.redirect,
     shot.key_pass_id,
-    player.id.GK,
-    player.name.GK,
-    shot.saved_off_target,
-    shot.saved_to_post,
-    location.x.GK,
-    location.y.GK,
-    AngleToGoal,
-    AngleToKeeper,
-    AngleDeviation
+    #player.id.GK,
+    #player.name.GK,
+    #shot.saved_off_target,
+    #shot.saved_to_post,
+    #location.x.GK,
+    #location.y.GK,
+    #AngleToGoal,
+    #AngleToKeeper,
+    #AngleDeviation
   )
 
 passes<- passes_df %>%
@@ -239,6 +241,7 @@ passes<- passes_df %>%
     second,
     period,
     possession_team.name,
+    team.id,
     team.name,
     player.id,
     player.name,
@@ -305,6 +308,35 @@ passes <- passes %>%
 
 ```
 
+
+Similar to how we calculate the shot distance to the goal, we will calculate the shot angle to the goal.
+``` {r}
+calculate_angle_to_goal <- function(x, y, goal_x = 120, goal_center = 40, goal_width = 7.32) {
+  # Convert goal half-width from meters to StatsBomb units
+  half_width <- (goal_width / 2) / 0.875
+  
+  left_y <- goal_center - half_width
+  right_y <- goal_center + half_width
+  
+  # Calculate the angle (in radians) from the shot to each goalpost
+  angle_left <- atan((left_y - y) / (goal_x - x))
+  angle_right <- atan((right_y - y) / (goal_x - x))
+  
+  # The angle to goal is the difference between the two angles
+  angle_rad <- angle_right - angle_left
+  
+  # Convert radians to degrees
+  angle_deg <- angle_rad * (180 / pi)
+  return(angle_deg)
+}
+
+shots <- shots %>%
+  mutate(angle_to_goal = calculate_angle_to_goal(location.x, location.y))
+
+
+```
+
+
 The shot.key_pass_id links the unique play id for a shot to the unique play id for the pass leading to the shot (if the shot was assisted). We do not need the unique play id for our purposes, but it will be helpful to know whether a shot was assisted or self-generated. We'll convert it to a true-false column.
 
 ``` {r}
@@ -360,6 +392,8 @@ shots %>%
   labs(title = "Top 10 Players by Total Shot Volume", x = "Player", y = "Shots")
 
 ```
+
+As a special initiative for football fans, StatsBomb released large selection of free data for Messi, which partially explains why we have far more shots for him than any other player.
 
 Most importantly, the histogram shows how far most shots are taken from the goal. We observe a clear peak at shorter distances, indicating that many shots come from inside or near the penalty box. However, there are also a number of longer-range attempts, suggesting variation in shooting strategy across players or teams.
 
@@ -495,21 +529,18 @@ xg_df <- shots %>%
          shot.first_time,
          shot.open_goal,
          shot.is_assisted,
-         location.x.GK,
-         location.y.GK,
-         AngleToGoal,
-         AngleToKeeper,
-         AngleDeviation
+         #location.x.GK,
+         #location.y.GK,
+         angle_to_goal,
+         competition_name,
+         season_name,
+         team.name,
+         player.name
          ) %>%
   mutate(is_goal = shot.outcome.name == "Goal") %>%  # creates TRUE/FALSE
   dplyr::select(is_goal, everything(), -shot.outcome.name)  # moves is_goal to the first column
 
 xg_df <- xg_df %>%
-  rename(
-    angle_to_goal = AngleToGoal,
-    angle_to_keeper = AngleToKeeper,
-    angle_deviation = AngleDeviation 
-  ) %>%
   mutate(is_shot_foot = if_else(shot.body_part.name %in% c("Right Foot", "Left Foot"), TRUE, FALSE)) %>%
   relocate(is_shot_foot, .after = shot.body_part.name) %>%
   dplyr::select(-shot.body_part.name)
@@ -667,12 +698,252 @@ ggplot(pred_data, aes(x = shot_distance, y = pred_prob)) +
        y = "Predicted Probability of Scoring") +
   theme_minimal()
 
+
 ```
 
+Our model clearly illustrates that the predicted goal probability decreases exponentially as the shot distance increases.
 
-we can try using the expected goal predictions to compare that to actual goals scored. we'll use the 2015/16 German Bundesliga as an example
+we can try using the expected goal predictions to compare that to actual goals scored. we'll use the 2015/16 English Premier League as an example
 ``` {r}
 
+# Filter for EPL 2015/16 and compute predicted xG using your model_descriptive
+premier_df_team <- xg_df_encoded %>%
+  filter(competition_name == "England - Premier League", season_name == "2015/2016") %>%
+  mutate(predicted_xg = predict(model_descriptive, newdata = ., type = "response"))
 
+# Aggregate the data to sum actual goals and expected goals for the season per team.
+# Using as.numeric(is_goal) converts TRUE to 1 and FALSE to 0 on the fly.
+team_summary <- premier_df_team %>%
+  group_by(team.name) %>%
+  summarise(
+    actual_goals = sum(as.numeric(is_goal), na.rm = TRUE),
+    expected_goals = sum(predicted_xg, na.rm = TRUE)
+  ) %>%
+  arrange(desc(actual_goals))
+
+# View the summary table
+print(team_summary)
+
+# Plot Actual vs Expected Goals for each team
+ggplot(team_summary, aes(x = expected_goals, y = actual_goals, label = team.name)) +
+  geom_point(color = "lightseagreen", size = 3) +
+  geom_text_repel(
+    size = 3,
+    max.overlaps = 15,
+    box.padding = 0.35,
+    point.padding = 0.5
+  ) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  labs(
+    title = "Actual Goals vs Expected Goals (xG) in 2015/16 EPL",
+    x = "Expected Goals (xG)",
+    y = "Actual Goals"
+  ) +
+  theme_minimal(base_size = 12)
+
+```
+
+``` {r}
+
+# Filter for Premier League 2015/16 shots and generate predictions
+premier_df_player <- xg_df_encoded %>%
+  filter(competition_name == "England - Premier League", season_name == "2015/2016") %>%
+  mutate(predicted_xg = predict(model_descriptive, newdata = ., type = "response"))
+
+# Aggregate the data at the player level
+player_summary <- premier_df_player %>%
+  group_by(player.name) %>%  # Grouping by player name and ID
+  summarise(
+    actual_goals = sum(as.numeric(is_goal), na.rm = TRUE),
+    expected_goals = sum(predicted_xg, na.rm = TRUE),
+    shots = n()
+  ) %>%
+  arrange(desc(actual_goals))
+
+# View the summary table
+print(player_summary)
+
+ggplot(player_summary, aes(x = expected_goals, y = actual_goals, label = player.name)) +
+  # Use a softer green color, e.g., "forestgreen" or "palegreen4"
+  geom_point(color = "lightseagreen", size = 3) +
+  # Use geom_text_repel to minimize overlapping labels
+  geom_text_repel(
+    size = 3,
+    max.overlaps = 15,   # controls how many labels can overlap before some are omitted
+    box.padding = 0.35,  # space around the text box
+    point.padding = 0.5  # space around the point
+  ) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  labs(
+    title = "Actual Goals vs Expected Goals (xG) by Player in 2015/16 Premier League",
+    x = "Total Expected Goals (xG)",
+    y = "Total Actual Goals"
+  ) +
+  theme_minimal(base_size = 12)  # Increase base font size if desired
+
+```
+
+We added a linear trend line (y = x) to clearly represent the relationship between actual and expected goals. If a team/player's goal output is above the trend line, then the team/player has scored more goals than expected. If a team/player's output is below the trend line, then the team/player has scored less goals than expected.
+
+This context is extremely valuable for organizations. For instance, if a player is having a low-scoring season, but has a high number of expected goals, the team could infer that the player's goal tally may come back around, and that there could be an opportunity to sign the player at a bargain transfer fee.
+
+Now let's look at the Spanish La Liga in that same season
+
+``` {r}
+
+# Filter for La Liga 2015/16 and compute predicted xG using your model_descriptive
+la_liga_df_team <- xg_df_encoded %>%
+  filter(competition_name == "Spain - La Liga", season_name == "2015/2016") %>%
+  mutate(predicted_xg = predict(model_descriptive, newdata = ., type = "response"))
+
+# Aggregate the data to sum actual goals and expected goals for the season per team.
+# Using as.numeric(is_goal) converts TRUE to 1 and FALSE to 0 on the fly.
+team_summary <- la_liga_df_team %>%
+  group_by(team.name) %>%
+  summarise(
+    actual_goals = sum(as.numeric(is_goal), na.rm = TRUE),
+    expected_goals = sum(predicted_xg, na.rm = TRUE)
+  ) %>%
+  arrange(desc(actual_goals))
+
+# View the summary table
+print(team_summary)
+
+# Plot Actual vs Expected Goals for each team
+ggplot(team_summary, aes(x = expected_goals, y = actual_goals, label = team.name)) +
+  geom_point(color = "lightseagreen", size = 3) +
+  geom_text_repel(
+    size = 3,
+    max.overlaps = 15,
+    box.padding = 0.35,
+    point.padding = 0.5
+  ) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  labs(
+    title = "Actual Goals vs Expected Goals (xG) in 2015/16 Spanish La Liga",
+    x = "Expected Goals (xG)",
+    y = "Actual Goals"
+  ) +
+  theme_minimal(base_size = 12)
+
+```
+
+``` {r}
+
+# Filter for La Liga 2015/16 shots and generate predictions
+la_liga_df_player <- xg_df_encoded %>%
+  filter(competition_name == "Spain - La Liga", season_name == "2015/2016") %>%
+  mutate(predicted_xg = predict(model_descriptive, newdata = ., type = "response"))
+
+# Aggregate the data at the player level
+player_summary <- la_liga_df_player %>%
+  group_by(player.name) %>%  # Grouping by player name and ID
+  summarise(
+    actual_goals = sum(as.numeric(is_goal), na.rm = TRUE),
+    expected_goals = sum(predicted_xg, na.rm = TRUE),
+    shots = n()
+  ) %>%
+  arrange(desc(actual_goals))
+
+# View the summary table
+print(player_summary)
+
+ggplot(player_summary, aes(x = expected_goals, y = actual_goals, label = player.name)) +
+  # Use a softer green color, e.g., "forestgreen" or "palegreen4"
+  geom_point(color = "lightseagreen", size = 3) +
+  # Use geom_text_repel to minimize overlapping labels
+  geom_text_repel(
+    size = 3,
+    max.overlaps = 15,   # controls how many labels can overlap before some are omitted
+    box.padding = 0.35,  # space around the text box
+    point.padding = 0.5  # space around the point
+  ) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  labs(
+    title = "Actual Goals vs Expected Goals (xG) by Player in 2015/16 Spanish La Liga",
+    x = "Total Expected Goals (xG)",
+    y = "Total Actual Goals"
+  ) +
+  theme_minimal(base_size = 12)  # Increase base font size if desired
+
+```
+
+Now let's look at the 2022 FIFA World Cup
+``` {r}
+
+# Filter for La Liga 2015/16 and compute predicted xG using your model_descriptive
+world_cup_df_team <- xg_df_encoded %>%
+  filter(competition_name == "International - FIFA World Cup", season_name == "2022") %>%
+  mutate(predicted_xg = predict(model_descriptive, newdata = ., type = "response"))
+
+# Aggregate the data to sum actual goals and expected goals for the season per team.
+# Using as.numeric(is_goal) converts TRUE to 1 and FALSE to 0 on the fly.
+team_summary <- world_cup_df_team %>%
+  group_by(team.name) %>%
+  summarise(
+    actual_goals = sum(as.numeric(is_goal), na.rm = TRUE),
+    expected_goals = sum(predicted_xg, na.rm = TRUE)
+  ) %>%
+  arrange(desc(actual_goals))
+
+# View the summary table
+print(team_summary)
+
+# Plot Actual vs Expected Goals for each team
+ggplot(team_summary, aes(x = expected_goals, y = actual_goals, label = team.name)) +
+  geom_point(color = "lightseagreen", size = 3) +
+  geom_text_repel(
+    size = 3,
+    max.overlaps = 15,
+    box.padding = 0.35,
+    point.padding = 0.5
+  ) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  labs(
+    title = "Actual Goals vs Expected Goals (xG) in 2022 FIFA World Cup",
+    x = "Expected Goals (xG)",
+    y = "Actual Goals"
+  ) +
+  theme_minimal(base_size = 12)
+
+```
+
+``` {r}
+
+# Filter for La Liga 2015/16 shots and generate predictions
+world_cup_df_player <- xg_df_encoded %>%
+  filter(competition_name == "International - FIFA World Cup", season_name == "2022") %>%
+  mutate(predicted_xg = predict(model_descriptive, newdata = ., type = "response"))
+
+# Aggregate the data at the player level
+player_summary <- world_cup_df_player %>%
+  group_by(player.name) %>%  # Grouping by player name and ID
+  summarise(
+    actual_goals = sum(as.numeric(is_goal), na.rm = TRUE),
+    expected_goals = sum(predicted_xg, na.rm = TRUE),
+    shots = n()
+  ) %>%
+  arrange(desc(actual_goals))
+
+# View the summary table
+print(player_summary)
+
+ggplot(player_summary, aes(x = expected_goals, y = actual_goals, label = player.name)) +
+  # Use a softer green color, e.g., "forestgreen" or "palegreen4"
+  geom_point(color = "lightseagreen", size = 3) +
+  # Use geom_text_repel to minimize overlapping labels
+  geom_text_repel(
+    size = 3,
+    max.overlaps = 15,   # controls how many labels can overlap before some are omitted
+    box.padding = 0.35,  # space around the text box
+    point.padding = 0.5  # space around the point
+  ) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  labs(
+    title = "Actual Goals vs Expected Goals (xG) in 2022 FIFA World Cup",
+    x = "Total Expected Goals (xG)",
+    y = "Total Actual Goals"
+  ) +
+  theme_minimal(base_size = 12)  # Increase base font size if desired
 
 ```

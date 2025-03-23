@@ -3,38 +3,35 @@
 library(tidyverse)
 library(StatsBombR)
 Comps <- FreeCompetitions()
-comps_shots <- Comps %>%
+comps_clean <- Comps %>%
   filter(
-    competition_gender == 'male',
-    !competition_name %in% c('FIFA U20 World Cup', 'Indian Super league', 'Major League Soccer', 'North American League')
-  )
+    competition_gender == 'male',competition_youth == FALSE,
+    !competition_name %in% c('FIFA U20 World Cup', 'Indian Super league', 'Major League Soccer', 'North American League'))
+  
 
-Matches <- FreeMatches(Comps)
+Matches_Shots <- FreeMatches(comps_clean)
 
-Matches_Shots <- Matches
-
-Matches_Passes <- Matches %>%
+Matches_Passes <- Matches_Shots %>%
   filter(year(match_date) >= 2000)
 
-StatsBombData_Shots <- free_allevents(MatchesDF = Matches_Shots, Parallel = T)
-StatsBombData_Passes <- free_allevents(MatchesDF = Matches_Passes, Parallel = T)
+#StatsBombData_Shots <- free_allevents(MatchesDF = Matches_Shots, Parallel = T)
+#StatsBombData_Shots1 = allclean(StatsBombData_Shots)
 
-StatsBombData_Shots = allclean(StatsBombData_Shots)
-StatsBombData_Passes = allclean(StatsBombData_Passes)
+StatsBombData_Shots_clean <- allclean(free_allevents(MatchesDF = Matches_Shots, Parallel = T))
+StatsBombData_Passes_clean <- allclean(free_allevents(MatchesDF = Matches_Passes, Parallel = T))
 
-shots <- StatsBombData_Shots %>%
-  filter(type.name == "Shot", !is.na(location)) %>%
-  unnest_wider(location, names_sep = "_") %>%
-  rename(x = location_1, y = location_2)
+#StatsBombData_Shots1 = allclean(StatsBombData_Shots)
+#StatsBombData_Passes1 = allclean(StatsBombData_Passes)
 
-passes <- StatsBombData_Passes %>%
-  filter(type.name == "Pass", !is.na(location)) %>%
-  unnest_wider(location, names_sep = "_") %>%
-  rename(x = location_1, y = location_2)
+shots <- StatsBombData_Shots_clean %>%
+  filter(type.name == "Shot")
+
+passes <- StatsBombData_Passes_clean %>%
+  filter(type.name == "Pass")
 
 shots <- shots %>%
   left_join(
-    Matches %>%
+    Matches_Shots %>%
       select(match_id, match_date),
     by = "match_id"
   ) %>%
