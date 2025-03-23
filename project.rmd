@@ -23,6 +23,9 @@ library(lubridate)
 library(caret)
 
 #devtools::install_github("statsbomb/StatsBombR")
+#devtools::install_github("josephmisiti/SBpitch")
+library(SBpitch)
+
 library(tidyverse)
 library(StatsBombR)
 
@@ -36,25 +39,24 @@ We set out to explore how shots have evolved over time, and whether we could bui
 To do this, we use open-access data provided by StatsBomb which includes detailed event-level information of football matches of different competition. It also contains StatsBomb’s own xG estimates. This allows us to compare our model’s predictions with this already established estimate.
 
 Ultimately, our goal is to test the hypothesis that closer shots have a higher chance of resulting in goals, and to see whether this insight is reflected in trends over time. In other words: are teams becoming more conservative, favoring high-probability chances over long-range efforts?
-In the end, we might see this being reflected in our xG model. The code for this projec can also be found  on [GitHub](https://github.com/otausendschoen/Football_Analysis).
+In the end, we might see this being reflected in our xG model. The code for this project can also be found  on [GitHub](https://github.com/otausendschoen/Football_Analysis).
 
 
 
 
 # Set up: Data & Libraries
 
-For this project, we will rely on the pacakge StasBomb. This package gives us access to detailed, event-level football data — including passes, shots, dribbles, and more — from professional matches around the world.
+For this project, we will rely on the package StasBomb. This package gives us access to detailed, event-level football data — including passes, shots, dribbles, and more — from professional matches around the world.
 
-In general, the package is used in the follwoing way:
+In general, the package is used in the following way:
 
 - Load a set of competitions and matches
 - Download all event data for those matches
 - Do analysis on subsets of this data. For example, we will start analyzing how shots behave over time below.
 
 
-In general, we can use the following code to obtain the data via the package's API. However, the dataset is very big so we decided to attach it as a csv. This is why this is commented out.
+In general, we can use the following code to obtain the data via the package's API. However, the dataset is very big so we decided to attach it as a CSV. Nevertheless, the code we used to obtain the initial data is below, commented out.
 
----INSERT TIRDODS CODE USED TO GET DATA, COMMENTED OUT---
 
 ``` {r}
 
@@ -152,7 +154,7 @@ In general, we can use the following code to obtain the data via the package's A
 
 ```
 
-The dataset below already is already filtered for the specific seasons, competition we use. It is important to note that the data for passes only includes 2 specific seasons for computational efficiency as it already includes about 200,000 observations.
+Another important point is that the dataset for shots is already filtered for the specific competition we use. This was the only possibility to get data as it was too big otherwise. On the other hand, the data for passes only includes 2 specific seasons for computational efficiency - and this is already includes about 200,000 observations.
 
 ```{r}
 shots_df <- read.csv("shots.csv")
@@ -316,7 +318,7 @@ shots <- shots %>%
 
 ```
 
-## Data exploration
+# Data exploration
 
 ```{r}
 shots %>%
@@ -399,7 +401,7 @@ ggplot(avg_shot_distance_by_year, aes(x = season_name, y = avg_shot_distance, gr
 
 ```
 
-This plot shows how most shots are not within the penalty or 11m box from the goal line. Interestingly, we can see how the shot distance started to increase on average from 1970 onwords. HOwever, the trend seems to have "stabilized at around 19 meter, indicating a potential tactical equilibrium — where players still attempt long-range shots, but the majority of efforts come from a more optimal shooting range. It will be interesting to see if we also observe this in our xG model.
+This plot shows how most shots are not within the penalty or 11m box from the goal line. Interestingly, we can see how the shot distance started to increase on average from 1970 on. However, the trend seems to have "stabilized at around 19 meter, indicating a potential tactical equilibrium — where players still attempt long-range shots, but the majority of efforts come from a more optimal shooting range. It will be interesting to see if we also observe this in our xG model.
 
 
 The plot for the average distance of passes can also be seen below but it is not as meaningful as we only have data for 2 seasons. We can see a sharp decrease in distance.
@@ -468,13 +470,15 @@ ggplot(passes, aes(x = pass_distance)) +
 
 For passes on the other hand, it is way more obvious. We can definitely see that short passes are more likely in the 2023/2024 season than in the 2015/2016 season!
 
+
 Next, we plot a few heatmaps in specific year to compare this in a bit more intuitive way over time.
 
-``` {r}
+# Heatmaps
 
-#insert heatmap code here
 
-```
+
+
+# Expected Goals Model
 
 Now, we'll create an expected goals model, to assess the likelihood of scoring a goal based on pre-shot information
 
