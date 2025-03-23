@@ -9,8 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
-
 ```{r, include = F}
 library(sf)
 library(spData)    
@@ -25,25 +23,27 @@ library(ggrepel)
 
 #devtools::install_github("statsbomb/StatsBombR")
 #devtools::install_github("josephmisiti/SBpitch")
+#devtools::install_github("FCrSTATS/SBpitch")
 library(SBpitch)
 
 library(tidyverse)
 library(StatsBombR)
 
+
+library(SBpitch)
+library(ggplot2)
+
+
+
 ```
 
 # Introduction
 
-As football enthusiasts, we are keen on analyzing games in great depth. Fortunately, the growing availability of open football data provides many opportunities to do so. This was one of the main motivations for our project.
-We set out to explore how shots have evolved over time, and whether we could build our own expected goals (xG) model — a tool widely used in football analytics to estimate the probability of a shot resulting in a goal.
+As football enthusiasts, we are keen on analyzing games in great depth. Fortunately, the growing availability of open football data provides many opportunities to do so. This was one of the main motivations for our project. We set out to explore how shots have evolved over time, and whether we could build our own expected goals (xG) model — a tool widely used in football analytics to estimate the probability of a shot resulting in a goal.
 
 To do this, we use open-access data provided by StatsBomb which includes detailed event-level information of football matches of different competition. It also contains StatsBomb’s own xG estimates. This allows us to compare our model’s predictions with this already established estimate.
 
-Ultimately, our goal is to test the hypothesis that closer shots have a higher chance of resulting in goals, and to see whether this insight is reflected in trends over time. In other words: are teams becoming more conservative, favoring high-probability chances over long-range efforts?
-In the end, we might see this being reflected in our xG model. The code for this project can also be found  on [GitHub](https://github.com/otausendschoen/Football_Analysis).
-
-
-
+Ultimately, our goal is to test the hypothesis that closer shots have a higher chance of resulting in goals, and to see whether this insight is reflected in trends over time. In other words: are teams becoming more conservative, favoring high-probability chances over long-range efforts? In the end, we might see this being reflected in our xG model. The code for this project can also be found on [GitHub](https://github.com/otausendschoen/Football_Analysis).
 
 # Set up: Data & Libraries
 
@@ -51,15 +51,13 @@ For this project, we will rely on the package StasBomb. This package gives us ac
 
 In general, the package is used in the following way:
 
-- Load a set of competitions and matches
-- Download all event data for those matches
-- Do analysis on subsets of this data. For example, we will start analyzing how shots behave over time below.
-
+-   Load a set of competitions and matches
+-   Download all event data for those matches
+-   Do analysis on subsets of this data. For example, we will start analyzing how shots behave over time below.
 
 In general, we can use the following code to obtain the data via the package's API. However, the dataset is very big so we decided to attach it as a CSV. Nevertheless, the code we used to obtain the initial data is below, commented out.
 
-
-``` {r}
+```{r}
 
 # #Pulling StatsBomb Free Data Into R
 # library(tidyverse)
@@ -164,7 +162,7 @@ passes_df <- read_csv(unz("passes.csv.zip", "passes.csv"))
 
 Before addressing our research question, we shall do some some preliminary data exploration to understand and get an overview of the data.
 
-```{r}
+```{r, message=FALSE}
 head(shots_df[, -c(1,2,3)])
 ```
 
@@ -187,7 +185,7 @@ shots <- shots_df %>%
     minute,
     second,
     period,
-    team.id,
+    #team.id,
     team.name,
     possession_team.name,
     player.id,
@@ -280,14 +278,12 @@ passes<- passes_df %>%
 
 ```
 
+To make life easier in the next sections, we calculate the shot distance from player to goal. StatsBomb uses a standard pitch coordinate system where:
 
-To make life easier in the next sections, we calculate the shot distance from player to goal.
-StatsBomb uses a standard pitch coordinate system where:
-
-- The field is 120 units long (from goal to goal, along the x-axis).
-- The field is 80 units wide (from sideline to sideline, along the y-axis).
-- The center of the opponent’s goal is at (120, 40): 
-- 120 StatsBomb units ≈ 105 meters → 1 unit ≈ 0.875 meters
+-   The field is 120 units long (from goal to goal, along the x-axis).
+-   The field is 80 units wide (from sideline to sideline, along the y-axis).
+-   The center of the opponent’s goal is at (120, 40):
+-   120 StatsBomb units ≈ 105 meters → 1 unit ≈ 0.875 meters
 
 ```{r}
 calculate_shot_distance <- function(x, y) {
@@ -310,9 +306,9 @@ passes <- passes %>%
 
 ```
 
-
 Similar to how we calculate the shot distance to the goal, we will calculate the shot angle to the goal.
-``` {r}
+
+```{r}
 calculate_angle_to_goal <- function(x, y, goal_x = 120, goal_center = 40, goal_width = 7.32) {
   # Convert goal half-width from meters to StatsBomb units
   half_width <- (goal_width / 2) / 0.875
@@ -338,10 +334,9 @@ shots <- shots %>%
 
 ```
 
-
 The shot.key_pass_id links the unique play id for a shot to the unique play id for the pass leading to the shot (if the shot was assisted). We do not need the unique play id for our purposes, but it will be helpful to know whether a shot was assisted or self-generated. We'll convert it to a true-false column.
 
-``` {r}
+```{r}
 
 shots <- shots %>%
   mutate(shot.is_assisted = !is.na(shot.key_pass_id)) %>%  # Create new column based on whether shot.key_pass_id is not null
@@ -377,14 +372,13 @@ passes %>%
 
 Similarly, the average distance for completed passes is much, much shorter, than passes that are not completed. Our documentation from StatsBomb states that all completed passes have a null outcome name, so we input the completed pass value in this step as well.
 
-
 ```{r}
 
 hist(shots$shot_distance, breaks = 30, main = "Shot Distance Distribution", xlab = "Distance to Goal (meters)")
 
 ```
 
-``` {r}
+```{r}
 shots %>%
   count(player.name, sort = TRUE) %>%
   slice_max(n, n = 10) %>%
@@ -400,6 +394,7 @@ As a special initiative for football fans, StatsBomb released large selection of
 Most importantly, the histogram shows how far most shots are taken from the goal. We observe a clear peak at shorter distances, indicating that many shots come from inside or near the penalty box. However, there are also a number of longer-range attempts, suggesting variation in shooting strategy across players or teams.
 
 We can do the same for the pass distances.
+
 ```{r}
 hist(passes$pass_distance, breaks = 50,
      main = "Distribution of Pass Distances",
@@ -437,10 +432,9 @@ ggplot(avg_shot_distance_by_year, aes(x = season_name, y = avg_shot_distance, gr
 
 This plot shows how most shots are not within the penalty or 11m box from the goal line. Interestingly, we can see how the shot distance started to increase on average from 1970 on. However, the trend seems to have "stabilized at around 19 meter, indicating a potential tactical equilibrium — where players still attempt long-range shots, but the majority of efforts come from a more optimal shooting range. It will be interesting to see if we also observe this in our xG model.
 
-
 The plot for the average distance of passes can also be seen below but it is not as meaningful as we only have data for 2 seasons. We can see a sharp decrease in distance.
 
-```{r}
+```{r, warning=FALSE}
 avg_pass_distance_by_year <- passes %>%
   group_by(season_name) %>%
   summarise(
@@ -462,9 +456,7 @@ ggplot(avg_pass_distance_by_year, aes(x = season_name, y = avg_pass_distance, gr
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-
 We will observe this more closely by taking a look at the distribution of each year. For this, we create a density plot faceted by season below.
-
 
 ```{r}
 ggplot(shots, aes(x = shot_distance)) +
@@ -504,19 +496,252 @@ ggplot(passes, aes(x = pass_distance)) +
 
 For passes on the other hand, it is way more obvious. We can definitely see that short passes are more likely in the 2023/2024 season than in the 2015/2016 season!
 
-
 Next, we plot a few heatmaps in specific year to compare this in a bit more intuitive way over time.
 
-# Heatmaps
+# FIFA World Cup Heatmaps
+
+Load libraries and Competitions using StatsBomb (only FIFA Men's World Cup)
+
+```{r, include = F}
 
 
+# Get all available competitions
+Comps <- FreeCompetitions()
 
+# Filter only FIFA World Cup (male)
+Comps <- Comps %>%
+  filter(competition_name == "FIFA World Cup", competition_gender == "male", season_name %in% c("1970", "2022"))
+
+# Get all matches for the FIFA World Cup
+Matches <- FreeMatches(Comps)
+
+# Download all event data for these matches
+StatsBombData <- free_allevents(MatchesDF = Matches, Parallel = T)
+
+# Clean the data
+StatsBombData <- allclean(StatsBombData)
+
+```
+
+Join competition data to get seasons (year)
+
+```{r}
+# Filter only shots from StatsBombData
+shots_wc   <- StatsBombData %>% filter(type.name == "Shot")
+passes_wc  <- StatsBombData %>% filter(type.name == "Pass")
+
+#Joined competetion to get seasons (for year analysis)
+
+#Joined shots with competions, to obtain seasons
+shots_wc   <- shots_wc %>% left_join(Comps, by = c("competition_id", "season_id"))
+
+#Joined passes with competions, to obtain seasons
+passes_wc  <- passes_wc %>%left_join(Comps, by = c("competition_id", "season_id"))
+```
+
+**Shot Density Map in the FIFA World Cup (1970 vs. 2022):** In this analysis, we group shots into a 10x10 meter grid and examine how shooting patterns have evolved in the FIFA World Cup (1970 vs. 2022).
+
+```{r, message=FALSE, warning=FALSE}
+# Ensure shot locations are within pitch boundaries
+heatmap <- shots_wc %>%
+  mutate(
+    location.x = pmax(0, pmin(120, location.x)),
+    location.y = pmax(0, pmin(80, location.y))
+  ) %>%
+  mutate(
+    xbin = cut(location.x, breaks = seq(0, 120, by = 10), include.lowest = TRUE, labels = FALSE),
+    ybin = cut(location.y, breaks = seq(0, 80, by = 10), include.lowest = TRUE, labels = FALSE)
+  )
+
+# Aggregate shots by bin and season
+heatmap_summary <- heatmap %>%
+  group_by(xbin, ybin, season_name) %>%
+  summarise(
+    shot_count = n(),
+    location.x = (xbin - 1) * 10 + 5,  # Center each bin
+    location.y = (ybin - 1) * 10 + 5,
+    .groups = "drop"
+  )
+
+```
+
+This heatmap visualizes shot density across different FIFA World Cup seasons by binning shot locations into a 10x10 meter grid, using a color scale ranging from blue to red to represent shot concentration—red areas indicate high shot frequency—and employing a facet wrap by season to facilitate a direct comparison of shooting patterns across the tournaments.
+
+```{r}
+
+ggplot(data = heatmap_summary, aes(x = location.x, y = location.y, fill = shot_count)) +
+  geom_tile(width = 10, height = 10, alpha = 0.9, color = "black") +  
+
+  # Pitch
+  annotate("rect", xmin = 0, xmax = 120, ymin = 0, ymax = 80, fill = NA, colour = "black", size = 0.6) +
+  annotate("rect", xmin = 18, xmax = 0, ymin = 18, ymax = 62, fill = NA, colour = "black", size = 0.6) +
+  annotate("rect", xmin = 102, xmax = 120, ymin = 18, ymax = 62, fill = NA, colour = "black", size = 0.6) +
+  annotate("segment", x = 60, xend = 60, y = 0, yend = 80, colour = "black", size = 0.6) +
+  annotate("point", x = 60, y = 40, colour = "black", size = 1.5) +
+  annotate(
+    "path",
+    x = 60 + 10 * cos(seq(0, 2 * pi, length.out = 100)),
+    y = 40 + 10 * sin(seq(0, 2 * pi, length.out = 100)),
+    colour = "black", size = 0.6
+  ) +
+
+  scale_fill_gradient(low = "blue", high = "red") +
+  scale_y_reverse() +
+  labs(
+    title = "Shot Density Map 1970-2022",
+    subtitle = "All Shots – FIFA World Cup"
+  ) +
+
+  coord_fixed(ratio = 95 / 100) +
+
+  facet_wrap(~season_name, ncol=2) +
+
+  theme_minimal()+
+  theme(
+    axis.text.x = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    legend.title = element_blank(),
+    legend.position = "bottom",  # Move legend below plot
+    plot.background = element_rect(fill = "white"),
+    panel.grid = element_blank(),
+    axis.ticks = element_blank(),
+    plot.margin = margin(1, 1, 1, 1),
+    strip.text = element_text(size = 12, face = "bold")  # Bigger facet titles
+
+  )
+```
+
+The comparison between 1970 and 2022 reveals a notable shift in shot concentration and tactical evolution: in 1970, shots were more evenly distributed across various areas—including the midfield and wide positions—with long-range attempts near the center circle suggesting an open-play style and reliance on wide attacks, whereas in 2022, there is a marked concentration of shots inside the penalty box, particularly in central positions (the red zone), reflecting modern tactics that prioritize high-percentage finishing and efficient shot locations, as evidenced by the more intense red zones indicating a higher shot frequency in dangerous areas near the goal.
+
+**Lionel Messi Shots in 2022 FIFA World:** To analyze Lionel Messi's shooting performance in the 2022 FIFA World Cup, we first filter his shots from the dataset.
+
+```{r}
+# Filter shots from Lionel Messi inside the box
+shots.messi <- shots_wc %>%
+  filter(
+    type.name == "Shot",
+    player.id == 5503  # Lionel Messi's ID
+  ) %>%
+  mutate(
+    goal = ifelse(shot.outcome.name == "Goal", "Goal", "Missed")  # Define goal/miss categories
+  )
+```
+
+The following plot shows the trajectories of Messi’s shots during the tournament, with goals highlighted in red and missed shots in blue.
+
+```{r, message=FALSE}
+# Plot pitch with colored shots
+create_Pitch() +
+  geom_segment(
+    data = shots.messi, 
+    aes(
+      x = location.x, 
+      y = location.y,
+      xend = shot.end_location.x, 
+      yend = shot.end_location.y,
+      color = goal  # Color by goal/miss
+    ),  
+    lineend = "round", 
+    size = 0.5,
+    arrow = arrow(length = unit(0.07, "inches"), ends = "last", type = "open")
+  ) +
+  
+  # Define colors for shot outcomes
+  scale_color_manual(values = c("Goal" = "red", "Missed" = "blue")) +  
+
+  # Labels and formatting
+  labs(
+    title = "Lionel Messi",
+    subtitle = "FIFA World Cup Shots, 2002",
+    color = "Shot Outcome"
+  ) +
+
+  # Adjust field proportions
+  scale_y_reverse() +
+  coord_fixed(ratio = 105 / 100)+
+   theme(
+    plot.margin = margin(1, 1, 1, 1),
+    legend.position = "bottom",  # Places legend below
+    legend.title = element_text(face = "bold"),  # Bold legend title
+    legend.key.width = unit(2.5, "cm"),  # Adjust legend size
+    legend.text = element_text(size = 10)  # Set legend text size,
+  )
+
+```
+
+Messi mostly takes his shots from inside or near the penalty area, rarely venturing outside the box. This suggests he favors close-range finishing over long-distance attempts, and his goals—highlighted with red arrows—are primarily clustered around the center of the penalty area.
+
+**Brazil 1970 vs 2022:** The code below filters shot data for the Brazil national team in the 1970 and 2022 FIFA World Cups, excluding penalties. It also defines a color scale for Expected Goals (xG) to visually represent shot quality. The filtered dataset includes shot locations, xG values, body parts used, and season names for further analysis and visualization.
+
+```{r}
+# Set team of interest
+selected.team <- "Brazil"
+
+# Define Expected Goals color scale
+shotmapxgcolors <- c("#192780", "#2a5d9f", "#40a7d0", "#87cdcf", "#e7f8e6", 
+                     "#f4ef95", "#FDE960", "#FCDC5F", "#F5B94D", "#F0983E", 
+                     "#ED8A37", "#E66424", "#D54F1B", "#DC2608", "#BF0000", 
+                     "#7F0000", "#5F0000") 
+
+# Filter shots for selected team (excluding penalties)
+shots.brazil <- shots_wc %>%
+  filter((shot.type.name != "Penalty" | is.na(shot.type.name)) & 
+         team.name == selected.team  & season_name %in% c("1970", "2022")) %>%
+  dplyr::select(location.x, location.y, shot.statsbomb_xg, shot.body_part.name, season_name)
+```
+
+This visualization compares Brazil's shot locations and expected goals (xG) in the 1970 and 2022 FIFA World Cups by plotting shot locations with colors representing their xG values, while different shapes indicate the body part used (head, left foot, or right foot), and a facet wrap by season allows a direct visual comparison between both eras, ultimately highlighting how Brazil's shot-taking patterns and quality evolved over time
+
+```{r, warning=FALSE}
+# Plot
+ggplot() +
+  # Draw pitch
+  annotate("rect", xmin = 0, xmax = 120, ymin = 0, ymax = 80, fill = NA, colour = "black", size = 0.6) +
+  annotate("rect", xmin = 18, xmax = 0, ymin = 18, ymax = 62, fill = NA, colour = "black", size = 0.6) +
+  annotate("rect", xmin = 102, xmax = 120, ymin = 18, ymax = 62, fill = NA, colour = "black", size = 0.6) +
+  annotate("point", x = 108, y = 40, colour = "black", size = 1.05) +  # Penalty spot
+  annotate("point", x = 60, y = 40, colour = "black", size = 1.05) +   # Center spot
+
+  # Plot shots
+  geom_point(data = shots.brazil, 
+             aes(x = location.x, y = location.y, fill = shot.statsbomb_xg, shape = shot.body_part.name),
+             size = 2, alpha = 0.8) +
+
+  # Color and shape scales
+  scale_fill_gradientn(colours = shotmapxgcolors, limits = c(0, 0.8), oob = scales::squish, name = "Expected Goals") +
+  scale_shape_manual(values = c("Head" = 21, "Right Foot" = 23, "Left Foot" = 24), name = "Body Part") +
+
+  # Facet by season
+  facet_wrap(~ season_name) +
+
+  # Labels and theme
+  labs(title = paste(selected.team, "Shot Maps"),
+       subtitle = "FIFA World Cup, Different Years") +
+  theme_minimal() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    plot.subtitle = element_text(size = 10, hjust = 0.5),
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = margin(1,1,1,1),
+    aspect.ratio = 65 / 100
+  ) +
+  coord_flip(xlim = c(85, 125))
+
+```
+
+In 1970, Brazil relied more on long-range shooting and varied attempts, whereas in 2022, their shot selection improved by favoring higher xG opportunities inside the penalty box, reflecting modern football trends that prioritize efficiency over volume.
 
 # Expected Goals Model
 
 Now, we'll create an expected goals model, to assess the likelihood of scoring a goal based on pre-shot information
 
-``` {r}
+```{r}
 
 xg_df <- shots %>%
   dplyr::select(shot.outcome.name,
@@ -552,7 +777,8 @@ xg_df <- xg_df %>%
 ```
 
 Next we perform categorical encoding on our columns that contain string values.
-``` {r}
+
+```{r}
 
 insert_one_hot <- function(df, col_name) {
   # Create dummy variables (as a data frame)
@@ -591,7 +817,8 @@ xg_df_encoded <- xg_df_encoded %>%
 Now, we're ready to start fitting our expected goals model.
 
 Before we start by adding in some of our descriptive variables, we'll fit a simple univariate logistic regression to measure the impact of shot distance on goals scored
-``` {r}
+
+```{r}
 
 set.seed(42)  # for reproducibility
 
@@ -602,7 +829,7 @@ test_data  <- xg_df_encoded[-train_index, ]
 
 ```
 
-``` {r}
+```{r}
 
 # Fit logistic regression on the training set
 model_distance <- glm(is_goal ~ shot_distance, data = train_data, family = binomial)
@@ -616,7 +843,7 @@ We can clearly see the convex curve represents that being closer to the goal has
 
 Now, let's add the shot angle
 
-``` {r}
+```{r}
 
 # Fit logistic regression on the training set (now adding angle)
 model_distance_and_angle <- glm(is_goal ~ shot_distance + angle_to_goal, data = train_data, family = binomial)
@@ -627,7 +854,8 @@ summary(model_distance_and_angle)
 ```
 
 We evaluate the two models
-``` {r}
+
+```{r}
 
 AIC(model_distance, model_distance_and_angle)
 
@@ -638,7 +866,8 @@ anova(model_distance, model_distance_and_angle, test = "Chisq")
 Adding shot angle on its own does not improve the model. With a p-value of .558, it is not statistically significant either.
 
 Now, let's add whether the shot was under pressure
-``` {r}
+
+```{r}
 
 # Fit logistic regression on the training set (now adding whether the shot was under pressure)
 model_distance_and_angle_and_pressure <- glm(is_goal ~ shot_distance + angle_to_goal + under_pressure, data = train_data, family = binomial)
@@ -649,7 +878,8 @@ summary(model_distance_and_angle_and_pressure)
 ```
 
 We evaluate the three models
-``` {r}
+
+```{r}
 
 AIC(model_distance, model_distance_and_angle, model_distance_and_angle_and_pressure)
 
@@ -660,7 +890,8 @@ anova(model_distance, model_distance_and_angle, model_distance_and_angle_and_pre
 We can see that the shot being under pressure has a sizable impact on goal probability. Meanwhile, the shot angle doesn't really have much of an impact, and it is not statistically significant either.
 
 Now, let's try adding some more descriptive variables.
-``` {r}
+
+```{r}
 
 model_descriptive <- glm(is_goal ~ 
                            shot_distance + 
@@ -675,7 +906,7 @@ summary(model_descriptive)
 
 ```
 
-``` {r}
+```{r}
 
 AIC(model_distance_and_angle_and_pressure, model_descriptive)
 
@@ -683,7 +914,7 @@ anova(model_distance_and_angle_and_pressure, model_descriptive, test = "Chisq")
 
 ```
 
-``` {r}
+```{r}
 
 # Predict on the test set (get predicted probabilities)
 predicted_probs <- predict(model_descriptive, newdata = test_data, type = "response")
@@ -708,7 +939,8 @@ ggplot(pred_data, aes(x = shot_distance, y = pred_prob)) +
 Our model clearly illustrates that the predicted goal probability decreases exponentially as the shot distance increases.
 
 we can try using the expected goal predictions to compare that to actual goals scored. we'll use the 2015/16 English Premier League as an example
-``` {r}
+
+```{r}
 
 # Filter for EPL 2015/16 and compute predicted xG using your model_descriptive
 premier_df_team <- xg_df_encoded %>%
@@ -747,7 +979,7 @@ ggplot(team_summary, aes(x = expected_goals, y = actual_goals, label = team.name
 
 ```
 
-``` {r}
+```{r}
 
 # Filter for Premier League 2015/16 shots and generate predictions
 premier_df_player <- xg_df_encoded %>%
@@ -793,7 +1025,7 @@ This context is extremely valuable for organizations. For instance, if a player 
 
 Now let's look at the Spanish La Liga in that same season
 
-``` {r}
+```{r}
 
 # Filter for La Liga 2015/16 and compute predicted xG using your model_descriptive
 la_liga_df_team <- xg_df_encoded %>%
@@ -832,7 +1064,7 @@ ggplot(team_summary, aes(x = expected_goals, y = actual_goals, label = team.name
 
 ```
 
-``` {r}
+```{r}
 
 # Filter for La Liga 2015/16 shots and generate predictions
 la_liga_df_player <- xg_df_encoded %>%
@@ -873,7 +1105,8 @@ ggplot(player_summary, aes(x = expected_goals, y = actual_goals, label = player.
 ```
 
 Now let's look at the 2022 FIFA World Cup
-``` {r}
+
+```{r}
 
 # Filter for La Liga 2015/16 and compute predicted xG using your model_descriptive
 world_cup_df_team <- xg_df_encoded %>%
@@ -912,7 +1145,7 @@ ggplot(team_summary, aes(x = expected_goals, y = actual_goals, label = team.name
 
 ```
 
-``` {r}
+```{r}
 
 # Filter for La Liga 2015/16 shots and generate predictions
 world_cup_df_player <- xg_df_encoded %>%
