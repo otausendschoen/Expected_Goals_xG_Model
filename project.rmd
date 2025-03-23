@@ -20,16 +20,13 @@ library(gdistance)
 library(terra)
 library(exactextractr)
 library(lubridate)
+library(caret)
 
 #devtools::install_github("statsbomb/StatsBombR")
 library(tidyverse)
 library(StatsBombR)
 
 ```
-
-
-
-
 
 # Introduction
 
@@ -158,14 +155,14 @@ In general, we can use the following code to obtain the data via the package's A
 The dataset below already is already filtered for the specific seasons, competition we use. It is important to note that the data for passes only includes 2 specific seasons for computational efficiency as it already includes about 200,000 observations.
 
 ```{r}
-shots<-read.csv("shots.csv")
-passes <- read_csv(unz("passes.csv.zip", "passes.csv"))
+shots_df <- read.csv("shots.csv")
+passes_df <- read_csv(unz("passes.csv.zip", "passes.csv"))
 ```
 
 Before addressing our research question, we shall do some some preliminary data exploration to understand and get an overview of the data.
 
 ```{r}
-head(shots[, -c(1,2,3)])
+head(shots_df[, -c(1,2,3)])
 ```
 
 As we can see, there are in total 186 columns and 12720 observations. These observations are all seasons for most tournaments but filtered for only shots. The observations for passes on the other hand can be found in the other dataset.
@@ -177,7 +174,7 @@ Before we start the analysis, we do some basic data pre processing and also remo
 ```{r}
 
 
-shots <- shots %>%
+shots <- shots_df %>%
   dplyr::select(
     id,
     match_id,
@@ -219,6 +216,7 @@ shots <- shots %>%
     shot.open_goal,
     shot.deflected,
     shot.redirect,
+    shot.key_pass_id,
     player.id.GK,
     player.name.GK,
     shot.saved_off_target,
@@ -230,7 +228,7 @@ shots <- shots %>%
     AngleDeviation
   )
 
-passes<- passes%>%
+passes<- passes_df %>%
   dplyr::select(
         id,
     match_id,
@@ -307,6 +305,16 @@ passes <- passes %>%
 
 ```
 
+The shot.key_pass_id links the unique play id for a shot to the unique play id for the pass leading to the shot (if the shot was assisted). We do not need the unique play id for our purposes, but it will be helpful to know whether a shot was assisted or self-generated. We'll convert it to a true-false column.
+
+``` {r}
+
+shots <- shots %>%
+  mutate(shot.is_assisted = !is.na(shot.key_pass_id)) %>%  # Create new column based on whether shot.key_pass_id is not null
+  relocate(shot.is_assisted, .after = shot.key_pass_id) %>%  # Move is_assisted right after shot.key_pass_id
+  dplyr::select(-shot.key_pass_id)    
+
+```
 
 ## Data exploration
 
@@ -319,7 +327,7 @@ shots %>%
 
 ```
 
-We can already confirm a bit our suspicions with this table. The average distance when scoring a goal is way lower compared to the other shot outcomes such as being blocked or being saved.
+As we can see above, the average distance when scoring a goal is much lower compared to the other shot outcomes such as being blocked or being saved.
 
 ```{r}
 passes %>%
@@ -486,6 +494,7 @@ xg_df <- shots %>%
          shot.follows_dribble,
          shot.first_time,
          shot.open_goal,
+         shot.is_assisted,
          location.x.GK,
          location.y.GK,
          AngleToGoal,
@@ -494,6 +503,16 @@ xg_df <- shots %>%
          ) %>%
   mutate(is_goal = shot.outcome.name == "Goal") %>%  # creates TRUE/FALSE
   dplyr::select(is_goal, everything(), -shot.outcome.name)  # moves is_goal to the first column
+
+xg_df <- xg_df %>%
+  rename(
+    angle_to_goal = AngleToGoal,
+    angle_to_keeper = AngleToKeeper,
+    angle_deviation = AngleDeviation 
+  ) %>%
+  mutate(is_shot_foot = if_else(shot.body_part.name %in% c("Right Foot", "Left Foot"), TRUE, FALSE)) %>%
+  relocate(is_shot_foot, .after = shot.body_part.name) %>%
+  dplyr::select(-shot.body_part.name)
 
 ```
 
@@ -523,11 +542,137 @@ insert_one_hot <- function(df, col_name) {
 
 xg_df_encoded <- xg_df  # make a copy to preserve original
 
-cols_to_encode <- c("play_pattern.name", "shot.technique.name", "shot.body_part.name", "shot.type.name")
+cols_to_encode <- c("play_pattern.name", "shot.technique.name", "shot.type.name")
 
 for (col in cols_to_encode) {
   xg_df_encoded <- insert_one_hot(xg_df_encoded, col)
 }
 
+xg_df_encoded <- xg_df_encoded %>%
+  mutate(across(where(is.logical), ~ if_else(is.na(.), FALSE, .)))
+
 ```
 
+Now, we're ready to start fitting our expected goals model.
+
+Before we start by adding in some of our descriptive variables, we'll fit a simple univariate logistic regression to measure the impact of shot distance on goals scored
+``` {r}
+
+set.seed(42)  # for reproducibility
+
+# Create an 70/30 train-test split based on the is_goal variable
+train_index <- createDataPartition(xg_df_encoded$is_goal, p = 0.7, list = FALSE)
+train_data <- xg_df_encoded[train_index, ]
+test_data  <- xg_df_encoded[-train_index, ]
+
+```
+
+``` {r}
+
+# Fit logistic regression on the training set
+model_distance <- glm(is_goal ~ shot_distance, data = train_data, family = binomial)
+
+# Summarize the model
+summary(model_distance)
+
+```
+
+We can clearly see the convex curve represents that being closer to the goal has a direct impact on the probability of the goal.
+
+Now, let's add the shot angle
+
+``` {r}
+
+# Fit logistic regression on the training set (now adding angle)
+model_distance_and_angle <- glm(is_goal ~ shot_distance + angle_to_goal, data = train_data, family = binomial)
+
+# Summarize the model
+summary(model_distance_and_angle)
+
+```
+
+We evaluate the two models
+``` {r}
+
+AIC(model_distance, model_distance_and_angle)
+
+anova(model_distance, model_distance_and_angle, test = "Chisq")
+
+```
+
+Adding shot angle on its own does not improve the model. With a p-value of .558, it is not statistically significant either.
+
+Now, let's add whether the shot was under pressure
+``` {r}
+
+# Fit logistic regression on the training set (now adding whether the shot was under pressure)
+model_distance_and_angle_and_pressure <- glm(is_goal ~ shot_distance + angle_to_goal + under_pressure, data = train_data, family = binomial)
+
+# Summarize the model
+summary(model_distance_and_angle_and_pressure)
+
+```
+
+We evaluate the three models
+``` {r}
+
+AIC(model_distance, model_distance_and_angle, model_distance_and_angle_and_pressure)
+
+anova(model_distance, model_distance_and_angle, model_distance_and_angle_and_pressure, test = "Chisq")
+
+```
+
+We can see that the shot being under pressure has a sizable impact on goal probability. Meanwhile, the shot angle doesn't really have much of an impact, and it is not statistically significant either.
+
+Now, let's try adding some more descriptive variables.
+``` {r}
+
+model_descriptive <- glm(is_goal ~ 
+                           shot_distance + 
+                           angle_to_goal + 
+                           is_shot_foot + 
+                           under_pressure +
+                           shot.is_assisted
+                    , data = train_data, family = binomial)
+
+# Summarize the model
+summary(model_descriptive)
+
+```
+
+``` {r}
+
+AIC(model_distance_and_angle_and_pressure, model_descriptive)
+
+anova(model_distance_and_angle_and_pressure, model_descriptive, test = "Chisq")
+
+```
+
+``` {r}
+
+# Predict on the test set (get predicted probabilities)
+predicted_probs <- predict(model_descriptive, newdata = test_data, type = "response")
+
+# Create a prediction data frame covering the range of shot distances
+pred_data <- data.frame(shot_distance = seq(min(train_data$shot_distance, na.rm = TRUE),
+                                              max(train_data$shot_distance, na.rm = TRUE),
+                                              length.out = 100))
+pred_data$pred_prob <- predict(model_distance, newdata = pred_data, type = "response")
+
+# Plot the relationship between shot distance and predicted probability
+ggplot(pred_data, aes(x = shot_distance, y = pred_prob)) +
+  geom_line(color = "blue") +
+  labs(title = "Predicted Goal Probability vs. Shot Distance",
+       x = "Shot Distance from the Goal (Meters)",
+       y = "Predicted Probability of Scoring") +
+  theme_minimal()
+
+```
+
+
+we can try using the expected goal predictions to compare that to actual goals scored. we'll use the 2015/16 German Bundesliga as an example
+``` {r}
+
+
+
+```
