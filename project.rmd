@@ -22,9 +22,12 @@ library(caret)
 library(ggrepel)
 library(ggplot2)
 library(stringr)
+#install.packages("magick")
+#install.packages("ggimage")
+
 library(ggimage)
 
-#devtools::install_github("statsbomb/StatsBombR")
+devtools::install_github("statsbomb/StatsBombR")
 #devtools::install_github("josephmisiti/SBpitch")
 #devtools::install_github("FCrSTATS/SBpitch")
 
@@ -504,9 +507,17 @@ ggplot(passes, aes(x = pass_distance)) +
 
 For passes on the other hand, it is way more obvious. We can definitely see that short passes are more likely in the 2023/2024 season than in the 2015/2016 season!
 
+# Section II: Heatmaps of Shots and passes over Time
+
+We shall shortly plot the the overall trend of shot distances and pass distances with a heatmap helow. 
+
+{ADD HEATMAPS HERE, EXACTLY LIKE IN SECTION III BUT WITH THE ACTUAL DATA of shots and passas, SO NOT ONLY FOR FIFA}
+
+Does it support our hypothesis?
+
 # Section III: FIFA World Cup Shot Charts and Heatmaps
 
-Next, we plot a few heatmaps in to compare data from the 1970 to 2022 FIFA World Cup to compare shot and pass tends for two distinct tournaments 52 years apart.
+Next, we plot a few heatmaps to compare data from the 1970 to 2022 FIFA World Cup to compare shot and pass tends for two distinct tournaments 52 years apart.
 
 We load our 1970 and 2022 FIFA World Cup data.
 
@@ -642,67 +653,17 @@ ggplot(data = heatmap_summary, aes(x = location.x, y = location.y, fill = shot_c
   )
 ```
 
-The comparison between 1970 and 2022 reveals a notable shift in shot concentration and tactical evolution: in 1970, shots were more evenly distributed across various areas—including the midfield and wide positions—with long-range attempts near the center circle suggesting an open-play style and reliance on wide attacks, whereas in 2022, there is a marked concentration of shots inside the penalty box, particularly in central positions (the red zone), reflecting modern tactics that prioritize high-percentage finishing and efficient shot locations, as evidenced by the more intense red zones indicating a higher shot frequency in dangerous areas near the goal.
+The comparison between 1970 and 2022 reveals a **notable shift in shot concentration** and tactical evolution, supporting our hypothesis: in 1970, shots were more evenly distributed across various areas—including the midfield and wide positions—with long-range attempts near the center circle suggesting an open-play style and reliance on wide attacks, whereas in 2022, there is a marked concentration of shots inside the penalty box, particularly in central positions (the red zone), reflecting modern tactics that prioritize high-percentage finishing and efficient shot locations, as evidenced by the more intense red zones indicating a higher shot frequency in dangerous areas near the goal.
 
-**Lionel Messi Shots in 2022 FIFA World:** To analyze Lionel Messi's shooting performance in the 2022 FIFA World Cup, we first filter his shots from the dataset.
+# Section III: Additional Analysis (with Expected Goals)
 
-```{r}
-# Filter shots from Lionel Messi inside the box
-shots.messi <- shots_wc %>%
-  filter(
-    type.name == "Shot",
-    player.id == 5503  # Lionel Messi's ID
-  ) %>%
-  mutate(
-    goal = ifelse(shot.outcome.name == "Goal", "Goal", "Missed")  # Define goal/miss categories
-  )
-```
+Before moving on to our final question of how the expected goal model can model this trend, we do some additional analysis on it.
 
-The following plot shows the trajectories of Messi’s shots during the tournament, with goals highlighted in red and missed shots in blue.
+In this section, we will analyze how the expected shots, estimated modeled by the data supplier behave in different years, so over time. This will be the first start on understanding if the expected goal model does also put more value onto the short-distance shots.
+We will model/plot this by 
 
-```{r, message=FALSE}
-# Plot pitch with colored shots
-create_Pitch() +
-  geom_segment(
-    data = shots.messi, 
-    aes(
-      x = location.x, 
-      y = location.y,
-      xend = shot.end_location.x, 
-      yend = shot.end_location.y,
-      color = goal  # Color by goal/miss
-    ),  
-    lineend = "round", 
-    size = 0.5,
-    arrow = arrow(length = unit(0.07, "inches"), ends = "last", type = "open")
-  ) +
-  
-  # Define colors for shot outcomes
-  scale_color_manual(values = c("Goal" = "red", "Missed" = "blue")) +  
 
-  # Labels and formatting
-  labs(
-    title = "Lionel Messi",
-    subtitle = "FIFA World Cup Shots, 2002",
-    color = "Shot Outcome"
-  ) +
-
-  # Adjust field proportions
-  scale_y_reverse() +
-  coord_fixed(ratio = 105 / 100)+
-   theme(
-    plot.margin = margin(1, 1, 1, 1),
-    legend.position = "bottom",  # Places legend below
-    legend.title = element_text(face = "bold"),  # Bold legend title
-    legend.key.width = unit(2.5, "cm"),  # Adjust legend size
-    legend.text = element_text(size = 10)  # Set legend text size,
-  )
-
-```
-
-Messi mostly takes his shots from inside or near the penalty area, rarely shooting from outside the box. This suggests he favors close-range finishing over long-distance attempts, and his goals—highlighted with red arrows—are primarily clustered around the center of the penalty area.
-
-**Brazil 1970 vs Qatar 2022:** The code below filters shot data for the Brazil national team in the 1970 and 2022 FIFA World Cups, excluding penalties. It also defines a color scale for Expected Goals (xG) to visually represent shot quality. The filtered dataset includes shot locations, xG values, body parts used, and season names for further analysis and visualization.
+**Brazil 1970 vs 2022:** The code below filters shot data for the Brazil national team in the 1970 and 2022 FIFA World Cups, excluding penalties. It also defines a color scale for Expected Goals (xG) to visually represent shot quality. The filtered dataset includes shot locations, xG values, body parts used, and season names.
 
 ```{r}
 # Set team of interest
@@ -721,7 +682,7 @@ shots.brazil <- shots_wc %>%
   dplyr::select(location.x, location.y, shot.statsbomb_xg, shot.body_part.name, season_name)
 ```
 
-This visualization compares Brazil's shot locations and expected goals (xG) in the 1970 and 2022 FIFA World Cups by plotting shot locations with colors representing their xG values, while different shapes indicate the body part used (head, left foot, or right foot), and a facet wrap by season allows a direct visual comparison between both eras, ultimately highlighting how Brazil's shot-taking patterns and quality evolved over time
+The visualization below plots this data. We do this by shot locations with colors representing their xG values, while different shapes indicate the body part used (head, left foot, or right foot), and a facet wrap by season allows a direct visual comparison between both eras, ultimately highlighting how Brazil's shot-taking patterns and quality evolved over time.
 
 ```{r, warning=FALSE}
 # Plot
@@ -764,7 +725,7 @@ ggplot() +
 
 ```
 
-In 1970, Brazil relied more on long-range shooting and varied attempts, whereas in 2022, their shot selection improved by favoring higher xG opportunities inside the penalty box, reflecting modern football trends that prioritize efficiency over volume.
+In 1970, Brazil relied more on long-range shooting and varied attempts, whereas in 2022, their shot selection improved by favoring higher xG opportunities inside the penalty box. Interestingly, we can already see in 1970 how the Expected Goal value is higher for close distanced shots. Overall, in this trend we are seeing priority on efficiency over volume.
 
 # Section IV: Expected Goals Model
 
@@ -1057,7 +1018,7 @@ ggplot(team_summary_with_logo, aes(x = expected_goals, y = actual_goals)) +
 
 ```
 
-Interestingly enough, we can see that only 3 of the 20 Premier League teams overperformed their expected goal output in 2015/16. Interestingly enough, Arsenal underperformed their expected goal output by a whopping 14 goals. Arsenal finished 2nd, and probably felt that they had a real chance at winning the league had they performed better in front of goal. Due to their struggles in front of goal, they targeted Leicester City striker Jamie Vardy to become their new striker, but ultimately settled for spending €20M on Lucas Perez from Deportivo following Vardy's rejection.
+We can see that only 3 of the 20 Premier League teams overperformed their expected goal output in 2015/16. Interestingly enough, Arsenal underperformed their expected goal output by a whopping 14 goals. Arsenal finished 2nd, and probably felt that they had a real chance at winning the league had they performed better in front of goal. Due to their struggles in front of goal, they targeted Leicester City striker Jamie Vardy to become their new striker, but ultimately settled for spending €20M on Lucas Perez from Deportivo following Vardy's rejection.
 
 Now, let's look at the graph for individual players.
 
@@ -1279,4 +1240,70 @@ This limits the predictive power of simple expected goals models, as they are de
 
 In this R markdown notebook, we have explored how shooting and passing decisions have evolved over time and created our own expected goals model. We discovered that the game has evolved, with teams taking a lower share of long shots and long passes than we observed 50 years ago. Instead, teams have come to favor retaining possession more, playing a higher share of short passes and spurning speculative shot attempts in favor of working harder to generate higher probability goal-scoring opportunities.
 
-These findings align with the output from our expected goals model. Goal probability decreseas exponentially the further back a player elects to shoot from. Football has clearly evolved and has become a much more efficient game.
+These findings align with the output from our expected goals model. Goal probability decreases exponentially the further back a player elects to shoot from. However, we noticed that the xG model does not account for player-specific finishing quality. This is a known limitation of classical xG models, which treat all players equally regardless of individual skill. Future work could explore these player-specific adjustments!
+Overall, the reduction in average shot and pass distance over time, particularly the concentration of shots inside the box in recent tournaments has clearly evolved: Football has thus become a much more efficient game.
+
+
+# Appendix: For interested Messi Fans. 
+
+**Lionel Messi Shots in 2022 FIFA World:**
+
+For those readers that are keen on learning how Lionel Messi performs in the FIFA, the following section shall analyze this briefly.
+
+To analyze Lionel Messi's shooting performance in the 2022 FIFA World Cup, we first filter his shots from the dataset.
+
+```{r}
+# Filter shots from Lionel Messi inside the box
+shots.messi <- shots_wc %>%
+  filter(
+    type.name == "Shot",
+    player.id == 5503  # Lionel Messi's ID
+  ) %>%
+  mutate(
+    goal = ifelse(shot.outcome.name == "Goal", "Goal", "Missed")  # Define goal/miss categories
+  )
+```
+
+The following plot shows the trajectories of Messi’s shots during the tournament, with goals highlighted in red and missed shots in blue.
+
+```{r, message=FALSE}
+# Plot pitch with colored shots
+create_Pitch() +
+  geom_segment(
+    data = shots.messi, 
+    aes(
+      x = location.x, 
+      y = location.y,
+      xend = shot.end_location.x, 
+      yend = shot.end_location.y,
+      color = goal  # Color by goal/miss
+    ),  
+    lineend = "round", 
+    size = 0.5,
+    arrow = arrow(length = unit(0.07, "inches"), ends = "last", type = "open")
+  ) +
+  
+  # Define colors for shot outcomes
+  scale_color_manual(values = c("Goal" = "red", "Missed" = "blue")) +  
+
+  # Labels and formatting
+  labs(
+    title = "Lionel Messi",
+    subtitle = "FIFA World Cup Shots, 2002",
+    color = "Shot Outcome"
+  ) +
+
+  # Adjust field proportions
+  scale_y_reverse() +
+  coord_fixed(ratio = 105 / 100)+
+   theme(
+    plot.margin = margin(1, 1, 1, 1),
+    legend.position = "bottom",  # Places legend below
+    legend.title = element_text(face = "bold"),  # Bold legend title
+    legend.key.width = unit(2.5, "cm"),  # Adjust legend size
+    legend.text = element_text(size = 10)  # Set legend text size,
+  )
+
+```
+
+Messi mostly takes his shots from inside or near the penalty area, rarely shooting from outside the box. This suggests he favors close-range finishing over long-distance attempts, and his goals—highlighted with red arrows—are primarily clustered around the center of the penalty area.
