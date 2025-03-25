@@ -27,7 +27,7 @@ library(stringr)
 
 library(ggimage)
 
-devtools::install_github("statsbomb/StatsBombR")
+#devtools::install_github("statsbomb/StatsBombR")
 #devtools::install_github("josephmisiti/SBpitch")
 #devtools::install_github("FCrSTATS/SBpitch")
 
@@ -982,8 +982,9 @@ model_descriptive <- glm(is_goal ~
                            angle_to_goal + 
                            under_pressure +
                            is_shot_foot + 
-                           shot.open_goal + 
-                           shot.is_assisted
+                           shot.is_assisted +
+                           shot.type.namePenalty + 
+                           shot.open_goal
                     , data = train_data, family = binomial)
 
 # Summarize the model
@@ -1094,7 +1095,7 @@ print(top_underperformers)
 team_summary_with_logo <- left_join(team_summary, team_logos, by = "team.name")
 
 ggplot(team_summary_with_logo, aes(x = expected_goals, y = actual_goals)) +
-  geom_image(aes(image = logo_path), size = 0.055) +  # Adjust size as needed
+  geom_image(aes(image = logo_path), size = 0.065) +  # Adjust size as needed
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
   labs(
     title = "Actual Goals vs Expected Goals (xG) in 2015/16 EPL",
@@ -1184,7 +1185,7 @@ ggplot(player_summary_with_logo_filtered, aes(x = expected_goals, y = actual_goa
 
 Now, we look at the individual player actual vs expected goal tallies. Interestingly enough, two of the three players who had the greatest overperformance in front of goal were Leicester City's Riyad Mahrez and Jamie Vardy. Mahrez scored 17 goals from 10.4 expected goals, while Vardy scored 24 goals from 18.6 expected goals. This overperformance in front of goal powered Leicester City to win the Premier League title despite being 5000-1 underdogs at the start of the season. As our results would indicate, this performance was not sustainable, which led to Leicester city almost being relegated in the following season
 
-Now that we have studied the English Premier League in 2015/16, let's look at the Spanish La Liga in that same season.
+Now that we have studied the English Premier League in 2015/16, let's look at the Spanish La Liga in that same 2015/16 season.
 
 ```{r}
 
