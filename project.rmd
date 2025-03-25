@@ -54,7 +54,7 @@ In general, the package is used in the following way:
 -   Download all event data for those matches
 -   Do analysis on subsets of this data. For example, we will start analyzing how shots behave over time below.
 
-In general, we can use the following code to obtain the data via the package's API. We use the API to load the data to power the heatmaps and shot charts we see in Section II, which only use FIFA World Cup data. However, the dataset that we use to train our model is very big and covers more competitions, so we decided to attach it as a CSV.  Nevertheless, the code we used to obtain the model training data is commented out below:
+In general, we can use the following code to obtain the data via the package's API. We use the API to load the data to power the heatmaps and shot charts we see in Section II, which only use FIFA World Cup data. However, the dataset that we use to train our model is very big and covers more competitions, so we decided to attach it as a CSV. Nevertheless, the code we used to obtain the model training data is commented out below:
 
 ```{r}
 
@@ -152,7 +152,7 @@ In general, we can use the following code to obtain the data via the package's A
 
 ```
 
-Another important point is that we filtered our shots data to just include major men's competitions. This leaves us with about 70,000 shots to train our model with.This was the only possibility to get data as it was too big otherwise. 
+Another important point is that we filtered our shots data to just include major men's competitions. This leaves us with about 70,000 shots to train our model with.This was the only possibility to get data as it was too big otherwise.
 
 On the other hand, the data for passes only includes 2 specific seasons for computational efficiency - and this is already includes about 200,000 observations.
 
@@ -375,7 +375,7 @@ passes %>%
 
 ```
 
-Similarly, the average distance for completed passes is much, much shorter, than passes that are not completed. 
+Similarly, the average distance for completed passes is much, much shorter, than passes that are not completed.
 
 Our documentation from StatsBomb states that all completed passes have a null outcome name, so we input the completed pass value in this step as well.
 
@@ -507,13 +507,105 @@ ggplot(passes, aes(x = pass_distance)) +
 
 For passes on the other hand, it is way more obvious. We can definitely see that short passes are more likely in the 2023/2024 season than in the 2015/2016 season!
 
-# Section II: Heatmaps of Shots and passes over Time
+# Section II: Heatmaps of Shots over Time
 
-We shall shortly plot the the overall trend of shot distances and pass distances with a heatmap helow. 
+We first filtered out penalty shots and ensured all shot coordinates stayed within the pitch boundaries. Then, we binned shot locations into 10x10 zones and extracted the first year from each `season_name` to assign a corresponding decade. We kept only shots from selected decades (1970s to 2020s). Finally, we grouped the data by bin and decade, counted the number of shots per bin, and calculated the proportion of shots (`shot_prop`) within each decade to allow normalized comparisons in the heatmap.
 
-{ADD HEATMAPS HERE, EXACTLY LIKE IN SECTION III BUT WITH THE ACTUAL DATA of shots and passas, SO NOT ONLY FOR FIFA}
+```{r, message=FALSE, warning=FALSE}
+library(stringr)
 
-Does it support our hypothesis?
+# Ensure shot locations are within pitch boundaries and compute bins + decade
+heatmap <- shots %>%
+  filter(
+    (shot.type.name != "Penalty" | is.na(shot.type.name))
+  ) %>%
+  mutate(
+    location.x = pmax(0, pmin(120, location.x)),
+    location.y = pmax(0, pmin(80, location.y)),
+    xbin = cut(location.x, breaks = seq(0, 120, by = 10), include.lowest = TRUE, labels = FALSE),
+    ybin = cut(location.y, breaks = seq(0, 80, by = 10), include.lowest = TRUE, labels = FALSE),
+    first_year = as.numeric(str_extract(season_name, "\\d{4}")),
+    decade = paste0(floor(first_year / 10) * 10, "s")
+  ) %>%
+  filter(
+    decade %in% c("1970s", "1980s", "1990s", "2000s", "2010s", "2020s")
+  )
+
+heatmap_summary <- heatmap %>%
+  group_by(xbin, ybin, decade) %>%
+  summarise(
+    shot_count = n(),
+    location.x = (xbin - 1) * 10 + 5,
+    location.y = (ybin - 1) * 10 + 5,
+    .groups = "drop"
+  ) %>%
+  group_by(decade) %>%
+  mutate(
+    shot_prop = shot_count / sum(shot_count)
+  ) %>%
+  ungroup()
+
+
+
+```
+
+This function plots shot density heatmaps by decade using normalized shot proportions. It maps shot intensity to a color gradient on a football pitch and generates one plot per selected decade.
+
+```{r}
+plot_heatmap_by_decade <- function(data, decades = c("1970s", "2010s", "2020s")) {
+  ggplot(data = data %>% filter(decade %in% decades),
+         aes(x = location.x, y = location.y, fill = shot_prop)) +
+    geom_tile(width = 10, height = 10, alpha = 0.9, color = "black") +  
+
+    # Pitch
+    annotate("rect", xmin = 0, xmax = 120, ymin = 0, ymax = 80, fill = NA, colour = "black", size = 0.6) +
+    annotate("rect", xmin = 18, xmax = 0, ymin = 18, ymax = 62, fill = NA, colour = "black", size = 0.6) +
+    annotate("rect", xmin = 102, xmax = 120, ymin = 18, ymax = 62, fill = NA, colour = "black", size = 0.6) +
+    annotate("segment", x = 60, xend = 60, y = 0, yend = 80, colour = "black", size = 0.6) +
+    annotate("point", x = 60, y = 40, colour = "black", size = 1.5) +
+    annotate(
+      "path",
+      x = 60 + 10 * cos(seq(0, 2 * pi, length.out = 100)),
+      y = 40 + 10 * sin(seq(0, 2 * pi, length.out = 100)),
+      colour = "black", size = 0.6
+    ) +
+
+    scale_fill_gradientn(
+    colours = c("white", "green", "yellow", "red"),
+    values = scales::rescale(c(0, 0.5, 1)),
+    name = "Shot %",
+    labels = scales::label_percent(scale = 1)
+  ) +
+    scale_y_reverse() +
+    labs(
+      title = "Shot Density Map",
+      subtitle = paste("Decades:", paste(decades, collapse = ", "))
+    ) +
+    coord_fixed(ratio = 95 / 100) +
+    facet_wrap(~decade, ncol = 2) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text.y = element_blank(),
+      legend.title = element_blank(),
+      legend.position = "bottom",
+      plot.background = element_rect(fill = "white"),
+      panel.grid = element_blank(),
+      axis.ticks = element_blank(),
+      plot.margin = margin(1, 1, 1, 1),
+      strip.text = element_text(size = 12, face = "bold")
+    )
+}
+
+# Plot only for 1970s and 2020s
+plot_heatmap_by_decade(heatmap_summary, decades = c("1970s"))
+plot_heatmap_by_decade(heatmap_summary, decades = c("2010s"))
+plot_heatmap_by_decade(heatmap_summary, decades = c("2020s"))
+```
+
+Across decades, we observed a clear shift in shot patterns. In the 1970s, shots were mostly central and close to goal. By the 2000s and especially the 2020s, shot locations became more varied, with increased use of wide areas and a continued tendency to shoot from close to the goal, reflecting evolving tactics and more diverse attacking strategies.
 
 # Section III: FIFA World Cup Shot Charts and Heatmaps
 
@@ -557,7 +649,7 @@ shots_wc   <- shots_wc %>% left_join(Comps, by = c("competition_id", "season_id"
 passes_wc  <- passes_wc %>%left_join(Comps, by = c("competition_id", "season_id"))
 ```
 
-``` {r}
+```{r}
 
 shots_by_season <- shots_wc %>%
   group_by(season_name) %>%
@@ -577,7 +669,7 @@ print(passes_by_season)
 
 We have much more data available for the 2022 World Cup, which makes sense given the advance of tracking data since 1970.
 
-**Shot Density Map in the FIFA World Cup (1970 vs. 2022):** 
+**Shot Density Map in the FIFA World Cup (1970 vs. 2022):**
 
 In this analysis, we group shots into a 10x10 meter grid and examine how shooting patterns have evolved in the FIFA World Cup (1970 vs. 2022).
 
@@ -659,9 +751,7 @@ The comparison between 1970 and 2022 reveals a **notable shift in shot concentra
 
 Before moving on to our final question of how the expected goal model can model this trend, we do some additional analysis on it.
 
-In this section, we will analyze how the expected shots, estimated modeled by the data supplier behave in different years, so over time. This will be the first start on understanding if the expected goal model does also put more value onto the short-distance shots.
-We will model/plot this by 
-
+In this section, we will analyze how the expected shots, estimated modeled by the data supplier behave in different years, so over time. This will be the first start on understanding if the expected goal model does also put more value onto the short-distance shots. We will model/plot this by
 
 **Brazil 1970 vs 2022:** The code below filters shot data for the Brazil national team in the 1970 and 2022 FIFA World Cups, excluding penalties. It also defines a color scale for Expected Goals (xG) to visually represent shot quality. The filtered dataset includes shot locations, xG values, body parts used, and season names.
 
@@ -819,8 +909,8 @@ test_data  <- xg_df_encoded[-train_index, ]
 
 ```
 
+Before we start by adding in some of our descriptive variables, we'll fit a simple univariate logistic regression to measure the impact of shot distance on goals scored.
 
-Before we start by adding in some of our descriptive variables, we'll fit a simple univariate logistic regression to measure the impact of shot distance on goals scored. 
 ```{r}
 
 # Fit logistic regression on the training set
@@ -879,14 +969,11 @@ anova(model_distance, model_distance_and_angle, model_distance_and_angle_and_pre
 
 ```
 
-We can see that incorporating shot pressure has continued to the lower the AIC, while continuing to be statistically significant. 
+We can see that incorporating shot pressure has continued to the lower the AIC, while continuing to be statistically significant.
 
-Now, let's try adding some more descriptive variables. 
+Now, let's try adding some more descriptive variables.
 
-We'll now add:
--   Whether the shot was taken with the player's foot (or with a different part of the body)
--   Whether the player had an open goal (or not)
--   Whether the shot was assisted (i.e. was this a self-generated chance or was it created by another player)
+We'll now add: - Whether the shot was taken with the player's foot (or with a different part of the body) - Whether the player had an open goal (or not) - Whether the shot was assisted (i.e. was this a self-generated chance or was it created by another player)
 
 ```{r}
 
@@ -945,7 +1032,7 @@ we can try using the expected goal predictions to compare that to actual goals s
 
 We will also load team logos for each of the teams in question to prettify the plot. We collected team image logos for each of the teams we will plot, which we load below.
 
-``` {r}
+```{r}
 
 # List all PNG files in the "logos" folder
 logo_files <- list.files("logos", pattern = "\\.png$", full.names = TRUE)
@@ -1153,7 +1240,7 @@ ggplot(team_summary_with_logo, aes(x = expected_goals, y = actual_goals)) +
 
 ```
 
-Barcelona and Real Madrid were miles ahead of the rest of the league in 2015/16! They each scored the most actual goals, while having the two highest actual vs. expected goal differentials. 
+Barcelona and Real Madrid were miles ahead of the rest of the league in 2015/16! They each scored the most actual goals, while having the two highest actual vs. expected goal differentials.
 
 Now let's look at the graph for individual players.
 
@@ -1230,9 +1317,9 @@ ggplot(player_summary_with_logo_filtered, aes(x = expected_goals, y = actual_goa
 
 ```
 
-As expected from the team graph, 6 of the 10 players who most outperformed their expected goal tallies play for Real Madrid or Barcelona. 
+As expected from the team graph, 6 of the 10 players who most outperformed their expected goal tallies play for Real Madrid or Barcelona.
 
-This makes sense, given the purpose of an expected goals model. An expected goals model merely estimates the probability of a goal given the pre-shot context. It does not, however, consider the quality of the player taking the shot. This is why we often see elite players have the largest overperformance relative to their historical expected goals, because they are clinical players who can convert difficult chances at a higher rate than the average player. 
+This makes sense, given the purpose of an expected goals model. An expected goals model merely estimates the probability of a goal given the pre-shot context. It does not, however, consider the quality of the player taking the shot. This is why we often see elite players have the largest overperformance relative to their historical expected goals, because they are clinical players who can convert difficult chances at a higher rate than the average player.
 
 This limits the predictive power of simple expected goals models, as they are designed to analyze historical performance and not meant to be predictive. [However, there are experimental approaches that use Bayesian methodologies to explore the influence of a particular player or position on predicting goal probabilities.](https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2024.1348983/full)
 
@@ -1240,11 +1327,9 @@ This limits the predictive power of simple expected goals models, as they are de
 
 In this R markdown notebook, we have explored how shooting and passing decisions have evolved over time and created our own expected goals model. We discovered that the game has evolved, with teams taking a lower share of long shots and long passes than we observed 50 years ago. Instead, teams have come to favor retaining possession more, playing a higher share of short passes and spurning speculative shot attempts in favor of working harder to generate higher probability goal-scoring opportunities.
 
-These findings align with the output from our expected goals model. Goal probability decreases exponentially the further back a player elects to shoot from. However, we noticed that the xG model does not account for player-specific finishing quality. This is a known limitation of classical xG models, which treat all players equally regardless of individual skill. Future work could explore these player-specific adjustments!
-Overall, the reduction in average shot and pass distance over time, particularly the concentration of shots inside the box in recent tournaments has clearly evolved: Football has thus become a much more efficient game.
+These findings align with the output from our expected goals model. Goal probability decreases exponentially the further back a player elects to shoot from. However, we noticed that the xG model does not account for player-specific finishing quality. This is a known limitation of classical xG models, which treat all players equally regardless of individual skill. Future work could explore these player-specific adjustments! Overall, the reduction in average shot and pass distance over time, particularly the concentration of shots inside the box in recent tournaments has clearly evolved: Football has thus become a much more efficient game.
 
-
-# Appendix: For interested Messi Fans. 
+# Appendix: For interested Messi Fans.
 
 **Lionel Messi Shots in 2022 FIFA World:**
 
