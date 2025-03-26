@@ -165,7 +165,7 @@ Before addressing our research question, we shall do some some preliminary data 
 
 ```{r, message=FALSE}
 
-names(shots_df)
+#names(shots_df)
 
 head(shots_df[, -c(1,2,3)])
 ```
@@ -495,7 +495,7 @@ ggplot(passes, aes(x = pass_distance)) +
 
 For passes on the other hand, it is way more obvious. We can definitely see that short passes are more likely in the 2023/2024 season than in the 2015/2016 season!
 
-# Section II: Heatmaps of Shots over Time
+# Section IIa: Heatmaps of Shots over Time
 
 Let's put this to the pitch.
 
@@ -577,12 +577,10 @@ plot_single_decade <- function(df, dec) {
       y = 40 + 10 * sin(seq(0, 2 * pi, length.out = 100)),
       colour = "black", size = 0.4
     ) +
-    # Add goal rectangle (optional)
     annotate("rect", xmin = 120, xmax = 121, ymin = 36.34, ymax = 43.66, #approximate actual goal post 
          fill = "black", alpha = 0.8)+
 
 
-    # Fill scale
     scale_fill_gradientn(
       colours = c("white", "green", "yellow", "red"),
       values = scales::rescale(c(0, 0.5, 1)),
@@ -591,7 +589,6 @@ plot_single_decade <- function(df, dec) {
       guide = guide_colorbar(barwidth = 10, barheight = 0.5, title.position = "top", label.position = "bottom")
     ) +
 
-    # Layout & theme
     coord_fixed() +
     scale_y_reverse() +
     labs(
@@ -630,7 +627,7 @@ Overall, this confirms our previous results and aligns with our hypothesis. We o
 
 # Section III: FIFA World Cup Shot Charts and Heatmaps
 
-Next, we plot a few heatmaps to compare data from the 1970 to 2022 FIFA World Cup to compare shot and pass tends for two distinct tournaments 52 years apart.
+Additionally, we plot a few heatmaps to compare specific data from the 1970 to 2022 FIFA World Cup to compare shot and pass tends for two distinct tournaments 52 years apart.
 
 We load our 1970 and 2022 FIFA World Cup data.
 
@@ -1057,7 +1054,7 @@ We will also load team logos for each of the teams in question to prettify the p
 ```{r}
 
 # List all PNG files in the "logos" folder
-logo_files <- list.files("logos", pattern = "\\.png$", full.names = TRUE)
+logo_files <- list.files("Logos", pattern = "\\.png$", full.names = TRUE)
 
 # Extract the team name from each filename by removing the folder path and ".png" extension
 #    e.g. "logos/Sevilla.png" -> "Sevilla"
