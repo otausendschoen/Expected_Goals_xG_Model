@@ -165,7 +165,7 @@ Before addressing our research question, we shall do some some preliminary data 
 
 ```{r, message=FALSE}
 
-names(shots_df)
+#names(shots_df)
 
 head(shots_df[, -c(1,2,3)])
 ```
@@ -389,20 +389,8 @@ hist(shots$shot_distance, breaks = 30, main = "Shot Distance Distribution", xlab
 
 Most importantly, the histogram shows how far most shots are taken from the goal. We observe a clear peak at shorter distances, indicating that many shots come from inside or near the penalty box. However, there are also a number of longer-range attempts, suggesting variation in shooting strategy across players or teams.
 
-For data exploration purposes, we create a plot to observe the 10 players for which we have the most shot data.
 
-```{r}
-shots %>%
-  count(player.name, sort = TRUE) %>%
-  slice_max(n, n = 10) %>%
-  ggplot(aes(x = reorder(player.name, n), y = n)) +
-  geom_col(fill = "steelblue") +
-  coord_flip() +
-  labs(title = "Top 10 Players by Total Shot Volume", x = "Player", y = "Shots")
-
-```
-
-As a special initiative for football fans, StatsBomb released large selection of free data for Messi, which partially explains why we have far more shots for him than any other player.
+Note: As a special initiative for football fans, StatsBomb released large selection of free data for Messi, which partially explains why we have far more shots for him than any other player. Data exploration in regards to that can be seen in the appendix
 
 We can do the same for the pass distances.
 
@@ -507,109 +495,139 @@ ggplot(passes, aes(x = pass_distance)) +
 
 For passes on the other hand, it is way more obvious. We can definitely see that short passes are more likely in the 2023/2024 season than in the 2015/2016 season!
 
-# Section II: Heatmaps of Shots over Time
+# Section IIa: Heatmaps of Shots over Time
 
-We first filtered out penalty shots and ensured all shot coordinates stayed within the pitch boundaries. Then, we binned shot locations into 10x10 zones and extracted the first year from each `season_name` to assign a corresponding decade. We kept only shots from selected decades (1970s to 2020s). Finally, we grouped the data by bin and decade, counted the number of shots per bin, and calculated the proportion of shots (`shot_prop`) within each decade to allow normalized comparisons in the heatmap.
+Let's put this to the pitch.
 
-```{r, message=FALSE, warning=FALSE}
-library(stringr)
-
-# Ensure shot locations are within pitch boundaries and compute bins + decade
-heatmap <- shots %>%
-  filter(
-    (shot.type.name != "Penalty" | is.na(shot.type.name))
-  ) %>%
+First off, we filter for shots filtered out penalty shots and add decades to the dataframe. This way, we don't have to do it for a specific year and get more general results! We also convert it to sf format to prepare the rasterized plots.
+The main challenge here was that we are not working with a proper CRS system so we needed to 
+```{r}
+# Filter non-penalty shots and extract decade
+shots_sf <- shots %>%
+  filter((shot.type.name != "Penalty" | is.na(shot.type.name))) %>%
   mutate(
-    location.x = pmax(0, pmin(120, location.x)),
-    location.y = pmax(0, pmin(80, location.y)),
-    xbin = cut(location.x, breaks = seq(0, 120, by = 10), include.lowest = TRUE, labels = FALSE),
-    ybin = cut(location.y, breaks = seq(0, 80, by = 10), include.lowest = TRUE, labels = FALSE),
     first_year = as.numeric(str_extract(season_name, "\\d{4}")),
     decade = paste0(floor(first_year / 10) * 10, "s")
   ) %>%
-  filter(
-    decade %in% c("1970s", "1980s", "1990s", "2000s", "2010s", "2020s")
-  )
-
-heatmap_summary <- heatmap %>%
-  group_by(xbin, ybin, decade) %>%
-  summarise(
-    shot_count = n(),
-    location.x = (xbin - 1) * 10 + 5,
-    location.y = (ybin - 1) * 10 + 5,
-    .groups = "drop"
-  ) %>%
-  group_by(decade) %>%
-  mutate(
-    shot_prop = shot_count / sum(shot_count)
-  ) %>%
-  ungroup()
-
-
+  filter(decade %in% c("1970s", "1980s", "1990s", "2000s", "2010s", "2020s")) %>%
+  st_as_sf(coords = c("location.x", "location.y"), crs = NA)  # pseudo-CRS
 
 ```
 
-This function plots shot density heatmaps by decade using normalized shot proportions. It maps shot intensity to a color gradient on a football pitch and generates one plot per selected decade.
+So as it can be seen, we used the terra package to rasterize shot locations over a pitch grid using 5x5 meter resolution. This aligns with the methods we saw in class and supports grid-based density analysis. While StatsBomb pitch coordinates are not georeferenced, we treat them as pseudo-meters to enable this raster-based generalization.
 
 ```{r}
-plot_heatmap_by_decade <- function(data, decades = c("1970s", "2010s", "2020s")) {
-  ggplot(data = data %>% filter(decade %in% decades),
-         aes(x = location.x, y = location.y, fill = shot_prop)) +
-    geom_tile(width = 10, height = 10, alpha = 0.9, color = "black") +  
+# Create a blank raster with pitch dimensions (0-120 x, 0-80 y)
+pitch_rast <- rast(xmin = 0, xmax = 120, ymin = 0, ymax = 80, resolution = 5)
+values(pitch_rast) <- 0  # initialize values to 0
+```
 
-    # Pitch
-    annotate("rect", xmin = 0, xmax = 120, ymin = 0, ymax = 80, fill = NA, colour = "black", size = 0.6) +
-    annotate("rect", xmin = 18, xmax = 0, ymin = 18, ymax = 62, fill = NA, colour = "black", size = 0.6) +
-    annotate("rect", xmin = 102, xmax = 120, ymin = 18, ymax = 62, fill = NA, colour = "black", size = 0.6) +
-    annotate("segment", x = 60, xend = 60, y = 0, yend = 80, colour = "black", size = 0.6) +
-    annotate("point", x = 60, y = 40, colour = "black", size = 1.5) +
-    annotate(
-      "path",
+Now having set the canva to work with, we now ise terra::rasterize() to count the number of shots falling into each raster cell. We store each raster layer separately, one for each decade. We get a multi-layer raster stack, where each layer represents shot density for a specific time period.
+
+```{r}
+# We'll loop through decades and create a raster stack
+decades <- unique(shots_sf$decade)
+raster_stack <- list()
+
+for (dec in decades) {
+  dec_points <- shots_sf %>% filter(decade == dec)
+  r <- rasterize(vect(dec_points), pitch_rast, fun = "sum")
+  names(r) <- dec
+  raster_stack[[dec]] <- r
+}
+
+# Combine into multi-layer raster
+r_stack <- rast(raster_stack)
+
+```
+
+
+Next up, we put this into df to prepare it for plotting. We also normalized shot counts to proportional density (shot_prop) per decade, making patterns comparable across time regardless of number of matches.
+
+```{r}
+# Convert to tidy data frame
+r_df <- as.data.frame(r_stack, xy = TRUE) %>%
+  pivot_longer(cols = -c(x, y), names_to = "decade", values_to = "shot_count") %>%
+  replace_na(list(shot_count = 0)) %>% #avoid errors
+  group_by(decade) %>%
+  mutate(shot_prop = shot_count / sum(shot_count)) %>% #normalize
+  ungroup()
+
+```
+
+Now we shall use the shot proportion to create the shot density heatmaps by decade.
+
+The function below maps shot intensity to a color gradient on a football pitch (annotiations: boxes, lines, etc) and generates one plot per selected decade.
+
+```{r}
+plot_single_decade <- function(df, dec) {
+  df %>%
+    filter(decade == dec) %>%
+    ggplot(aes(x = x, y = y, fill = shot_prop)) +
+    geom_tile() +
+
+    # Add football pitch annotations
+    annotate("rect", xmin = 0, xmax = 120, ymin = 0, ymax = 80, fill = NA, colour = "black", size = 0.6) +  # full pitch
+    annotate("rect", xmin = 0, xmax = 18, ymin = 18, ymax = 62, fill = NA, colour = "black", size = 0.4) +  # left box
+    annotate("rect", xmin = 102, xmax = 120, ymin = 18, ymax = 62, fill = NA, colour = "black", size = 0.4) + # right box
+    annotate("segment", x = 60, xend = 60, y = 0, yend = 80, colour = "black", size = 0.4) +  # halfway line
+    annotate("point", x = 60, y = 40, colour = "black", size = 1.3) +  # center spot
+    annotate("path",  # center circle
       x = 60 + 10 * cos(seq(0, 2 * pi, length.out = 100)),
       y = 40 + 10 * sin(seq(0, 2 * pi, length.out = 100)),
-      colour = "black", size = 0.6
+      colour = "black", size = 0.4
     ) +
+    annotate("rect", xmin = 120, xmax = 121, ymin = 36.34, ymax = 43.66, #approximate actual goal post 
+         fill = "black", alpha = 0.8)+
+
 
     scale_fill_gradientn(
-    colours = c("white", "green", "yellow", "red"),
-    values = scales::rescale(c(0, 0.5, 1)),
-    name = "Shot %",
-    labels = scales::label_percent(scale = 1)
-  ) +
+      colours = c("white", "green", "yellow", "red"),
+      values = scales::rescale(c(0, 0.5, 1)),
+      name = "Shot %",
+      labels = scales::label_percent(scale = 1),
+      guide = guide_colorbar(barwidth = 10, barheight = 0.5, title.position = "top", label.position = "bottom")
+    ) +
+
+    coord_fixed() +
     scale_y_reverse() +
     labs(
-      title = "Shot Density Map",
-      subtitle = paste("Decades:", paste(decades, collapse = ", "))
+      title = paste("Shot Density –", dec),
+      x = "Pitch X (m)",
+      y = "Pitch Y (m)"
     ) +
-    coord_fixed(ratio = 95 / 100) +
-    facet_wrap(~decade, ncol = 2) +
     theme_minimal() +
     theme(
-      axis.text.x = element_blank(),
-      axis.title.x = element_blank(),
-      axis.title.y = element_blank(),
-      axis.text.y = element_blank(),
-      legend.title = element_blank(),
-      legend.position = "bottom",
-      plot.background = element_rect(fill = "white"),
+      axis.text = element_blank(),
+      axis.title = element_blank(),
       panel.grid = element_blank(),
-      axis.ticks = element_blank(),
-      plot.margin = margin(1, 1, 1, 1),
-      strip.text = element_text(size = 12, face = "bold")
+      legend.position = "bottom",
+      legend.title = element_text(size = 10, face = "bold"),
+      legend.text = element_text(size = 8),
+      legend.box.spacing = unit(0.3, "cm"),
+      plot.title = element_text(face = "bold", size = 14)
     )
 }
 
-# Plot only for 1970s and 2020s
-plot_heatmap_by_decade(heatmap_summary, decades = c("1970s"))
-plot_heatmap_by_decade(heatmap_summary, decades = c("2010s"))
-plot_heatmap_by_decade(heatmap_summary, decades = c("2020s"))
+
+plot_single_decade(r_df, "1970s")
+plot_single_decade(r_df, "1980s")
+plot_single_decade(r_df, "1990s")
+plot_single_decade(r_df, "2000s")
+plot_single_decade(r_df, "2010s")
+plot_single_decade(r_df, "2020s")
+
 ```
 
-Across decades, we observed a clear shift in shot patterns. In the 1970s, shots were mostly central and close to goal. By the 2000s and especially the 2020s, shot locations became more varied, with increased use of wide areas and a continued tendency to shoot from close to the goal, reflecting evolving tactics and more diverse attacking strategies.
+
+
+Across decades, we observed a **shift in shot patterns.** In the 1970s, shots were spread out compared to the other decades. By the 2000s and especially the 2020s, shot locations became closer to the goal.
+
+Overall, this confirms our previous results and aligns with our hypothesis. We observe an evolve in tactics and closer shots become more common. 
 
 # Section III: FIFA World Cup Shot Charts and Heatmaps
 
-Next, we plot a few heatmaps to compare data from the 1970 to 2022 FIFA World Cup to compare shot and pass tends for two distinct tournaments 52 years apart.
+Additionally, we plot a few heatmaps to compare specific data from the 1970 to 2022 FIFA World Cup to compare shot and pass tends for two distinct tournaments 52 years apart.
 
 We load our 1970 and 2022 FIFA World Cup data.
 
@@ -1036,7 +1054,7 @@ We will also load team logos for each of the teams in question to prettify the p
 ```{r}
 
 # List all PNG files in the "logos" folder
-logo_files <- list.files("logos", pattern = "\\.png$", full.names = TRUE)
+logo_files <- list.files("Logos", pattern = "\\.png$", full.names = TRUE)
 
 # Extract the team name from each filename by removing the folder path and ".png" extension
 #    e.g. "logos/Sevilla.png" -> "Sevilla"
@@ -1331,6 +1349,19 @@ In this R markdown notebook, we have explored how shooting and passing decisions
 These findings align with the output from our expected goals model. Goal probability decreases exponentially the further back a player elects to shoot from. However, we noticed that the xG model does not account for player-specific finishing quality. This is a known limitation of classical xG models, which treat all players equally regardless of individual skill. Future work could explore these player-specific adjustments! Overall, the reduction in average shot and pass distance over time, particularly the concentration of shots inside the box in recent tournaments has clearly evolved: Football has thus become a much more efficient game.
 
 # Appendix: For interested Messi Fans.
+
+**Lionel Messi as top player**
+
+```{r}
+shots %>%
+  count(player.name, sort = TRUE) %>%
+  slice_max(n, n = 10) %>%
+  ggplot(aes(x = reorder(player.name, n), y = n)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 10 Players by Total Shot Volume", x = "Player", y = "Shots")
+
+```
 
 **Lionel Messi Shots in 2022 FIFA World:**
 
