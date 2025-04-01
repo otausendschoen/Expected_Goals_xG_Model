@@ -1,0 +1,1009 @@
+---
+title: "Geospatial Final Exam"
+author: "Oliver Tausendschön, Adrian Alejandro Vacca Bonilla, Tirdod Behbehani"
+date: "2025-03-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include = F}
+library(sf)
+library(spData)    
+library(tidyverse)
+library(dplyr)
+library(gdistance)
+library(terra)
+library(exactextractr)
+library(lubridate)
+library(caret)
+library(ggrepel)
+library(ggplot2)
+library(stringr)
+#install.packages("magick")
+#install.packages("ggimage")
+
+library(ggimage)
+
+#devtools::install_github("statsbomb/StatsBombR")
+#devtools::install_github("josephmisiti/SBpitch")
+#devtools::install_github("FCrSTATS/SBpitch")
+
+library(SBpitch)
+library(StatsBombR)
+
+```
+
+# Introduction
+
+As football enthusiasts, we are keen on analyzing games in great depth. Fortunately, the growing availability of open football data provides many opportunities to do so. This was one of the main motivations for our project. We set out to explore how shots have evolved over time, and whether we could build our own expected goals (xG) model — a tool widely used in football analytics to estimate the probability of a shot resulting in a goal.
+
+To do this, we use open-access data provided by StatsBomb. For each event in a match (like a shot, pass, dribble, save, or duel), StatsBomb provides detailed event-level information on what occurred on the pitch. We have this data across 13 competitions for a wide timeframe, from 1958 to 2024.
+
+Ultimately, our goal is to test the hypothesis that closer shots have a higher chance of resulting in goals, and to see whether this insight is reflected in trends over time. In other words: are teams becoming more conservative, favoring high-probability chances over long-range efforts? In the end, we might see this being reflected in our xG model. The code for this project can also be found on [GitHub](https://github.com/otausendschoen/Football_Analysis).
+
+# Section I: Set Up Data & Libraries
+
+For this project, we will rely on the package StatsBombR. This package gives us access to detailed, event-level football data — including passes, shots, dribbles, and more — from professional matches around the world.
+
+In general, the package is used in the following way:
+
+-   Load a set of competitions and matches
+-   Download all event data for those matches
+-   Do analysis on subsets of this data. For example, we will start analyzing how shots behave over time below.
+
+In general, we can use the following code to obtain the data via the package's API. We use the API to load the data to power the heatmaps and shot charts we see in Section II, which only use FIFA World Cup data. However, the dataset that we use to train our model is very big and covers more competitions, so we decided to attach it as a CSV. Nevertheless, the code we used to obtain the model training data is commented out below:
+
+```{r}
+
+# #Pulling StatsBomb Free Data Into R
+# library(tidyverse)
+# library(StatsBombR)
+# Comps <- FreeCompetitions()
+# comps_shots <- Comps %>%
+#   filter(
+#     competition_gender == 'male',
+#     !competition_name %in% c('FIFA U20 World Cup', 'Indian Super league', 'Major League Soccer', 'North American League')
+#   )
+# 
+# Matches <- FreeMatches(Comps)
+# 
+# Matches_Shots <- Matches
+# 
+# Matches_Passes <- Matches %>%
+#   filter(year(match_date) >= 2000)
+# 
+# StatsBombData_Shots <- free_allevents(MatchesDF = Matches_Shots, Parallel = T)
+# StatsBombData_Passes <- free_allevents(MatchesDF = Matches_Passes, Parallel = T)
+# 
+# StatsBombData_Shots = allclean(StatsBombData_Shots)
+# StatsBombData_Passes = allclean(StatsBombData_Passes)
+# 
+# shots <- StatsBombData_Shots %>%
+#   filter(type.name == "Shot", !is.na(location)) %>%
+#   unnest_wider(location, names_sep = "_") %>%
+#   rename(x = location_1, y = location_2)
+# 
+# passes <- StatsBombData_Passes %>%
+#   filter(type.name == "Pass", !is.na(location)) %>%
+#   unnest_wider(location, names_sep = "_") %>%
+#   rename(x = location_1, y = location_2)
+# 
+# shots <- shots %>%
+#   left_join(
+#     Matches %>%
+#       select(match_id, match_date),
+#     by = "match_id"
+#   ) %>%
+#   left_join(
+#     Comps %>%
+#       select(competition_id, season_id, competition_name, season_name),
+#     by = c("competition_id", "season_id")
+#   ) %>%
+#   mutate(match_date = as.Date(match_date))
+# 
+# shots_clean <- shots %>%
+#   select(
+#     -carry.end_location,
+#     -goalkeeper.end_location,
+#     -tactics.lineup,
+#     -related_events,
+#     -shot.freeze_frame,
+#     -pass.end_location
+#   ) %>%
+#   unnest_wider(shot.end_location, names_sep = "_") %>%
+#   rename(
+#     shot.end_x = shot.end_location_1,
+#     shot.end_y = shot.end_location_2
+#   )
+# 
+# passes <- passes %>%
+#   left_join(
+#     Matches %>%
+#       select(match_id, match_date),
+#     by = "match_id"
+#   ) %>%
+#   left_join(
+#     Comps %>%
+#       select(competition_id, season_id, competition_name, season_name),
+#     by = c("competition_id", "season_id")
+#   ) %>%
+#   mutate(match_date = as.Date(match_date))
+# 
+# passes_clean <- passes %>%
+#   select(
+#     -carry.end_location,
+#     -goalkeeper.end_location,
+#     -tactics.lineup,
+#     -related_events,
+#     -shot.end_location,
+#     -shot.freeze_frame
+#   ) %>%
+#   unnest_wider(pass.end_location, names_sep = "_") %>%
+#   rename(
+#     pass.end_x = pass.end_location_1,
+#     pass.end_y = pass.end_location_2
+#   )
+# 
+# write_csv(shots_clean, "shots.csv")
+# write_csv(passes_clean, "passes.csv")
+
+```
+
+Another important point is that we filtered our shots data to just include major men's competitions. This leaves us with about 70,000 shots to train our model with.This was the only possibility to get data as it was too big otherwise.
+
+On the other hand, the data for passes only includes 2 specific seasons for computational efficiency - and this is already includes about 200,000 observations.
+
+```{r}
+shots_df <- read_csv(unz("shots_new.csv.zip", "shots_new.csv"))
+passes_df <- read_csv(unz("passes.csv.zip", "passes.csv"))
+```
+
+Before addressing our research question, we shall do some some preliminary data exploration to understand and get an overview of the data.
+
+```{r, message=FALSE}
+
+#names(shots_df)
+
+head(shots_df[, -c(1,2,3)])
+```
+
+As we can see, there are in total 180 columns and 70,553 observations. These observations are all seasons for most tournaments but filtered for only shots. The observations for passes on the other hand can be found in the other dataset.
+
+Before we start the analysis, we do some basic data pre processing and also remove some of these redundant 186 columns that we do not require.
+
+## Data Pre-Processing
+
+```{r}
+
+
+shots <- shots_df %>%
+  dplyr::select(
+    id,
+    match_id,
+    competition_name,
+    season_name,
+    timestamp,
+    minute,
+    second,
+    period,
+    #team.id,
+    team.name,
+    possession_team.name,
+    player.id,
+    player.name,
+    #position.id,
+    position.name,
+    #play_pattern.id,
+    play_pattern.name,
+    under_pressure,
+    location.x,
+    location.y,
+    shot.end_x,
+    shot.end_y,
+    #shot.end_location.z,
+    #shot.end_location_3,
+    #shot_impact_height,
+    shot.statsbomb_xg,
+    #shot.outcome.id,
+    shot.outcome.name,
+    #shot.technique.id,
+    shot.technique.name,
+    #shot.body_part.id,
+    shot.body_part.name,
+    #shot.type.id,
+    shot.type.name,
+    shot.aerial_won,
+    shot.redirect,
+    shot.follows_dribble,
+    shot.first_time,
+    shot.open_goal,
+    shot.deflected,
+    shot.redirect,
+    shot.key_pass_id,
+    #player.id.GK,
+    #player.name.GK,
+    #shot.saved_off_target,
+    #shot.saved_to_post,
+    #location.x.GK,
+    #location.y.GK,
+    #AngleToGoal,
+    #AngleToKeeper,
+    #AngleDeviation
+  )
+
+passes<- passes_df %>%
+  dplyr::select(
+        id,
+    match_id,
+    competition_name,
+    season_name,
+    timestamp,
+    minute,
+    second,
+    period,
+    possession_team.name,
+    team.id,
+    team.name,
+    player.id,
+    player.name,
+    position.name,
+    play_pattern.name,
+    under_pressure,
+    location.x,
+    location.y,
+    pass.length, 
+    pass.angle, 
+    pass.end_x, 
+    pass.end_y, 
+    pass.aerial_won, 
+    pass.switch, 
+    pass.cross, 
+    pass.assisted_shot_id, 
+    pass.shot_assist, 
+    pass.inswinging, 
+    pass.deflected, 
+    pass.outswinging, 
+    pass.through_ball, 
+    pass.cut_back, 
+    pass.goal_assist, 
+    pass.recipient.id, 
+    pass.recipient.name, 
+    pass.height.name, 
+    pass.body_part.name, 
+    pass.type.name, 
+    pass.outcome.name, 
+    pass.technique.name, 
+    ball_receipt.outcome.name,
+    pass.no_touch
+  )
+
+```
+
+To make life easier in the next sections, we calculate the shot distance from player to goal. StatsBomb uses a standard pitch coordinate system where:
+
+-   The field is 120 units long (from goal to goal, along the x-axis).
+-   The field is 80 units wide (from sideline to sideline, along the y-axis).
+-   The center of the opponent’s goal is at (120, 40):
+-   120 StatsBomb units ≈ 105 meters → 1 unit ≈ 0.875 meters
+
+We use Euclidean distance as our distance metric.
+
+```{r}
+calculate_shot_distance <- function(x, y) {
+  sqrt((120 - x)^2 + (40 - y)^2) * (105 / 120)}
+
+shots <- shots %>%
+  mutate(shot_distance = calculate_shot_distance(location.x, location.y))
+
+```
+
+We do the same for the distance for the distance of the passes, from player to player.
+
+```{r}
+calculate_pass_distance <- function(x1, y1, x2, y2) {
+  sqrt((x2 - x1)^2 + (y2 - y1)^2) * (105 / 120)
+}
+
+passes <- passes %>%
+  mutate(pass_distance = calculate_pass_distance(location.x, location.y, pass.end_x, pass.end_y))
+
+```
+
+Similar to how we calculate the shot distance to the goal, we will calculate the shot angle to the goal.
+
+```{r}
+calculate_angle_to_goal <- function(x, y, goal_x = 120, goal_center = 40, goal_width = 7.32) {
+  # Convert goal half-width from meters to StatsBomb units
+  half_width <- (goal_width / 2) / 0.875
+  
+  left_y <- goal_center - half_width
+  right_y <- goal_center + half_width
+  
+  # Calculate the angle (in radians) from the shot to each goalpost
+  angle_left <- atan((left_y - y) / (goal_x - x))
+  angle_right <- atan((right_y - y) / (goal_x - x))
+  
+  # The angle to goal is the difference between the two angles
+  angle_rad <- angle_right - angle_left
+  
+  # Convert radians to degrees
+  angle_deg <- angle_rad * (180 / pi)
+  return(angle_deg)
+}
+
+shots <- shots %>%
+  mutate(angle_to_goal = calculate_angle_to_goal(location.x, location.y))
+
+```
+
+The shot.key_pass_id links the unique play id for a shot to the unique play id for the pass leading to the shot (if the shot was assisted). We do not need the unique play id for our purposes, but it will be helpful to know whether a shot was assisted or self-generated. We'll convert it to a true-false column.
+
+```{r}
+
+shots <- shots %>%
+  mutate(shot.is_assisted = !is.na(shot.key_pass_id)) %>%  # Create new column based on whether shot.key_pass_id is not null
+  relocate(shot.is_assisted, .after = shot.key_pass_id) %>%  # Move is_assisted right after shot.key_pass_id
+  dplyr::select(-shot.key_pass_id)    
+
+```
+
+# Section II: Data Exploration
+
+```{r}
+shots %>%
+  group_by(shot.outcome.name) %>%
+  summarise(avg_distance = mean(shot_distance, na.rm = TRUE),
+            count = n()) %>%
+  arrange(avg_distance)
+
+```
+
+As we can see above, the average distance when scoring a goal is much lower compared to the other shot outcomes such as being blocked or being saved.
+
+```{r}
+passes %>%
+  mutate(pass.outcome.name = replace_na(pass.outcome.name, "Complete")) %>%
+  group_by(pass.outcome.name) %>%
+  summarise(
+    avg_distance = mean(pass_distance, na.rm = TRUE),
+    count = n()
+  ) %>%
+  arrange(avg_distance)
+
+```
+
+Similarly, the average distance for completed passes is much, much shorter, than passes that are not completed.
+
+Our documentation from StatsBomb states that all completed passes have a null outcome name, so we input the completed pass value in this step as well.
+
+We now create a histogram to look at the shot distance distribution.
+
+```{r}
+
+hist(shots$shot_distance, breaks = 30, main = "Shot Distance Distribution", xlab = "Distance to Goal (meters)")
+
+```
+
+Most importantly, the histogram shows how far most shots are taken from the goal. We observe a clear peak at shorter distances, indicating that many shots come from inside or near the penalty box. However, there are also a number of longer-range attempts, suggesting variation in shooting strategy across players or teams.
+
+
+Note: As a special initiative for football fans, StatsBomb released large selection of free data for Messi, which partially explains why we have far more shots for him than any other player. Data exploration in regards to that can be seen in the appendix
+
+We can do the same for the pass distances.
+
+```{r}
+hist(passes$pass_distance, breaks = 50,
+     main = "Distribution of Pass Distances",
+     xlab = "Pass Distance (meters)",
+     col = "lightblue", border = "white")
+```
+
+Let's plot this over time:
+
+For convenience, we include a trendline using LOESS (Locally Estimated Scatterplot Smoothing), regression method that captures the underlying trend - without assuming a strictly linear relationship.
+
+```{r}
+
+avg_shot_distance_by_year <- shots %>%
+  group_by(season_name) %>%
+  summarise(
+    avg_shot_distance = mean(shot_distance, na.rm = TRUE),
+    shot_count = n()
+  ) %>%
+  filter(!is.na(season_name))
+
+ggplot(avg_shot_distance_by_year, aes(x = season_name, y = avg_shot_distance, group = 1)) +
+  geom_line(size = 1.2, color = "darkred") +
+  geom_point(size = 2, color = "black") +
+  geom_smooth(method = "loess", se = FALSE, color = "steelblue", linetype = "dashed") +
+  labs(
+    title = "Average Shot Distance Over Time",
+    x = "Season",
+    y = "Average Distance to Goal (in pitch units)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+This plot shows how most shots are not within the penalty or 11m box from the goal line. Interestingly, we can see how the shot distance started to increase on average from 1970 on. However, the trend seems to have stabilized at around 19 meters, indicating a potential tactical equilibrium — where players still attempt long-range shots, but the majority of efforts come from a more optimal shooting range. It will be interesting to see if we also observe this in our xG model.
+
+The plot for the average distance of passes can also be seen below but it is not as meaningful as we only have data for 2 seasons. We can see a sharp decrease in distance.
+
+```{r, warning=FALSE}
+avg_pass_distance_by_year <- passes %>%
+  group_by(season_name) %>%
+  summarise(
+    avg_pass_distance = mean(pass_distance, na.rm = TRUE),
+    pass_count = n()
+  ) %>%
+  filter(!is.na(season_name))
+
+ggplot(avg_pass_distance_by_year, aes(x = season_name, y = avg_pass_distance, group = 1)) +
+  geom_line(size = 1.2, color = "darkgreen") +
+  geom_point(size = 2, color = "black") +
+  geom_smooth(method = "loess", se = FALSE, color = "steelblue", linetype = "dashed") +
+  labs(
+    title = "Average Pass Distance Over Time",
+    x = "Season",
+    y = "Average Pass Distance (m)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+We will observe this more closely by taking a look at the distribution of each year. For this, we create a density plot faceted by season below.
+
+```{r}
+ggplot(shots, aes(x = shot_distance)) +
+  geom_density(fill = "lightblue") +
+  facet_wrap(~season_name) +  # no `scales = "free_y"`
+  labs(
+    title = "Distribution of Shot Distances per Season",
+    x = "Shot Distance (m)",
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 6),
+    strip.text = element_text(size = 8)
+  )
+
+```
+
+However, the trend is more difficult to observe here. We can see how each season has a different pattern/shape and there is no universal rule or distribution that applies to all seasons.
+
+```{r}
+ggplot(passes, aes(x = pass_distance)) +
+  geom_density(fill = "lightblue") +
+  facet_wrap(~season_name) +
+  labs(
+    title = "Distribution of Pass Distances per Season",
+    x = "Pass Distance (m)",
+    y = "Density"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 6),
+    strip.text = element_text(size = 8)
+  )
+
+```
+
+For passes on the other hand, it is way more obvious. We can definitely see that short passes are more likely in the 2023/2024 season than in the 2015/2016 season!
+
+# Section III: Expected Goals Model
+
+Now, we'll create an expected goals model, to assess the likelihood of scoring a goal based on pre-shot information.
+
+We load some relevant shot data to prepare our model.
+
+```{r}
+
+xg_df <- shots %>%
+  dplyr::select(shot.outcome.name,
+         play_pattern.name,
+         under_pressure,
+         location.x,
+         location.y,
+         shot_distance,
+         shot.technique.name,
+         shot.body_part.name,
+         shot.type.name,
+         shot.aerial_won,
+         shot.follows_dribble,
+         shot.first_time,
+         shot.open_goal,
+         shot.is_assisted,
+         #location.x.GK,
+         #location.y.GK,
+         angle_to_goal,
+         competition_name,
+         season_name,
+         team.name,
+         player.name
+         ) %>%
+  mutate(is_goal = shot.outcome.name == "Goal") %>%  # creates TRUE/FALSE
+  dplyr::select(is_goal, everything(), -shot.outcome.name)  # moves is_goal to the first column
+
+xg_df <- xg_df %>%
+  mutate(is_shot_foot = if_else(shot.body_part.name %in% c("Right Foot", "Left Foot"), TRUE, FALSE)) %>%
+  relocate(is_shot_foot, .after = shot.body_part.name) %>%
+  dplyr::select(-shot.body_part.name)
+
+```
+
+Next we perform categorical encoding on our columns that contain string values.
+
+```{r}
+
+insert_one_hot <- function(df, col_name) {
+  # Create dummy variables (as a data frame)
+  dummies <- as.data.frame(model.matrix(~ . - 1, data = df[col_name]))
+  
+  # Clean up column names
+  colnames(dummies) <- gsub(paste0("^", col_name), col_name, colnames(dummies))
+  colnames(dummies) <- gsub(" ", ".", colnames(dummies))  # Replace spaces if needed
+  
+  # Get the original column position
+  pos <- which(names(df) == col_name)
+  
+  # Build new df: before, dummies, after
+  df_new <- bind_cols(
+    df[1:(pos - 1)],
+    dummies,
+    df[(pos + 1):ncol(df)]
+  )
+  
+  return(df_new)
+}
+
+xg_df_encoded <- xg_df  # make a copy to preserve original
+
+cols_to_encode <- c("play_pattern.name", "shot.technique.name", "shot.type.name")
+
+for (col in cols_to_encode) {
+  xg_df_encoded <- insert_one_hot(xg_df_encoded, col)
+}
+
+xg_df_encoded <- xg_df_encoded %>%
+  mutate(across(where(is.logical), ~ if_else(is.na(.), FALSE, .)))
+
+```
+
+Now, we're ready to start fitting our expected goals model. We'll perform a 70-30 training test split on our dataset.
+
+```{r}
+
+set.seed(42)  # for reproducibility
+
+# Create an 70/30 train-test split based on the is_goal variable
+train_index <- createDataPartition(xg_df_encoded$is_goal, p = 0.7, list = FALSE)
+train_data <- xg_df_encoded[train_index, ]
+test_data  <- xg_df_encoded[-train_index, ]
+
+```
+
+Before we start by adding in some of our descriptive variables, we'll fit a simple univariate logistic regression to measure the impact of shot distance on goals scored.
+
+```{r}
+
+# Fit logistic regression on the training set
+model_distance <- glm(is_goal ~ shot_distance, data = train_data, family = binomial)
+
+# Summarize the model
+summary(model_distance)
+
+```
+
+Now, let's add the shot angle to our model.
+
+```{r}
+
+# Fit logistic regression on the training set (now adding angle)
+model_distance_and_angle <- glm(is_goal ~ shot_distance + angle_to_goal, data = train_data, family = binomial)
+
+# Summarize the model
+summary(model_distance_and_angle)
+
+```
+
+We evaluate the two models using the AIC and a likelihood ratio test.
+
+```{r}
+
+AIC(model_distance, model_distance_and_angle)
+
+anova(model_distance, model_distance_and_angle, test = "Chisq")
+
+```
+
+We can see that the AIC of the model decreases slightly when we add the shot angle.
+
+However, when we look at the likelihood ratio test, we see that the the shot angle p-value is highly significant for whether a shot resulted in a goal.
+
+Now, let's add whether the shot was taken while under pressure from the defense.
+
+```{r}
+
+# Fit logistic regression on the training set (now adding whether the shot was under pressure)
+model_distance_and_angle_and_pressure <- glm(is_goal ~ shot_distance + angle_to_goal + under_pressure, data = train_data, family = binomial)
+
+# Summarize the model
+summary(model_distance_and_angle_and_pressure)
+
+```
+
+We evaluate the three models
+
+```{r}
+
+AIC(model_distance, model_distance_and_angle, model_distance_and_angle_and_pressure)
+
+anova(model_distance, model_distance_and_angle, model_distance_and_angle_and_pressure, test = "Chisq")
+
+```
+
+We can see that incorporating shot pressure has continued to the lower the AIC, while continuing to be statistically significant.
+
+Now, let's try adding some more descriptive variables.
+
+We'll now add: - Whether the shot was taken with the player's foot (or with a different part of the body) - Whether the player had an open goal (or not) - Whether the shot was assisted (i.e. was this a self-generated chance or was it created by another player)
+
+```{r}
+
+model_descriptive <- glm(is_goal ~ 
+                           shot_distance + 
+                           angle_to_goal + 
+                           under_pressure +
+                           is_shot_foot + 
+                           shot.is_assisted +
+                           shot.type.namePenalty + 
+                           shot.open_goal
+                    , data = train_data, family = binomial)
+
+# Summarize the model
+summary(model_descriptive)
+
+```
+
+```{r}
+
+AIC(model_distance_and_angle_and_pressure, model_descriptive)
+
+anova(model_distance_and_angle_and_pressure, model_descriptive, test = "Chisq")
+
+```
+
+Comparing the descriptive model to our previous best model, we see that the descriptive metrics have significantly improved our model.
+
+The AIC has lowered, while the deviance has lowered by 1257 while still maintaining statistical significance.
+
+Now that we have a suitable model, we will try to predict goal probabilities on our unseen testing data.
+
+```{r}
+
+# Predict on the test set (get predicted probabilities)
+predicted_probs <- predict(model_descriptive, newdata = test_data, type = "response")
+
+# Create a prediction data frame covering the range of shot distances
+pred_data <- data.frame(shot_distance = seq(min(train_data$shot_distance, na.rm = TRUE),
+                                              max(train_data$shot_distance, na.rm = TRUE),
+                                              length.out = 100))
+pred_data$pred_prob <- predict(model_distance, newdata = pred_data, type = "response")
+
+# Plot the relationship between shot distance and predicted probability
+ggplot(pred_data, aes(x = shot_distance, y = pred_prob)) +
+  geom_line(color = "blue") +
+  labs(title = "Predicted Goal Probability vs. Shot Distance",
+       x = "Shot Distance from the Goal (Meters)",
+       y = "Predicted Probability of Scoring") +
+  theme_minimal()
+
+```
+
+Our model clearly illustrates that the predicted goal probability decreases exponentially as the shot distance increases.
+
+we can try using the expected goal predictions to compare that to actual goals scored. we'll use the 2015/16 English Premier League as our first example. We will evaluate actual vs expected goal performance for both teams and players.
+
+We will also load team logos for each of the teams in question to prettify the plot. We collected team image logos for each of the teams we will plot, which we load below.
+
+```{r}
+
+# List all PNG files in the "logos" folder
+logo_files <- list.files("Logos", pattern = "\\.png$", full.names = TRUE)
+
+# Extract the team name from each filename by removing the folder path and ".png" extension
+#    e.g. "logos/Sevilla.png" -> "Sevilla"
+team_logos <- data.frame(
+  logo_path = logo_files,
+  stringsAsFactors = FALSE
+) %>%
+  mutate(
+    # Remove the folder path
+    filename = basename(logo_path),
+    # Remove ".png" extension
+    team.name = str_remove(filename, "\\.png$")
+  ) %>%
+  dplyr::select(team.name, logo_path)
+
+head(team_logos)
+
+```
+
+Now, we are ready to apply our descriptive model on 2015/16 Premier League teams. We choose 2015/16 because this is the season in which StatsBomb released the most free data.
+
+Note that we add a linear trend line (y = x) to clearly represent the relationship between actual and expected goals. If a team/player's goal output is above the trend line, then the team/player has scored more goals than expected. If a team/player's output is below the trend line, then the team/player has scored less goals than expected.
+
+```{r}
+
+# Filter for EPL 2015/16 and compute predicted xG using model_descriptive
+premier_df_team <- xg_df_encoded %>%
+  filter(competition_name == "England - Premier League", season_name == "2015/2016") %>%
+  mutate(predicted_xg = predict(model_descriptive, newdata = ., type = "response"))
+
+# Aggregate data at the team level and add a column for actual minus expected goals
+team_summary <- premier_df_team %>%
+  group_by(team.name) %>%
+  summarise(
+    actual_goals = sum(as.numeric(is_goal), na.rm = TRUE),
+    expected_goals = sum(predicted_xg, na.rm = TRUE),
+    shots = n()
+  ) %>%
+  mutate(goal_diff = actual_goals - expected_goals)
+
+# Top 10 overperforming teams (largest positive goal_diff)
+top_overperformers <- team_summary %>%
+  arrange(desc(goal_diff)) %>%
+  slice_head(n = 10)
+print("Top 10 Overperformers:")
+print(top_overperformers)
+
+# Top 10 underperforming teams (lowest, i.e. most negative goal_diff)
+top_underperformers <- team_summary %>%
+  arrange(goal_diff) %>%
+  slice_head(n = 10)
+print("Top 10 Underperformers:")
+print(top_underperformers)
+
+#merge team summary with the team logo dataframe
+team_summary_with_logo <- left_join(team_summary, team_logos, by = "team.name")
+
+ggplot(team_summary_with_logo, aes(x = expected_goals, y = actual_goals)) +
+  geom_image(aes(image = logo_path), size = 0.065) +  # Adjust size as needed
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  labs(
+    title = "Actual Goals vs Expected Goals (xG) in 2015/16 EPL",
+    x = "Expected Goals (xG)",
+    y = "Actual Goals"
+  ) +
+  theme_minimal(base_size = 12)
+
+```
+
+We can see that only 3 of the 20 Premier League teams overperformed their expected goal output in 2015/16. Interestingly enough, Arsenal underperformed their expected goal output by a whopping 14 goals. Arsenal finished 2nd, and probably felt that they had a real chance at winning the league had they performed better in front of goal. Due to their struggles in front of goal, they targeted Leicester City striker Jamie Vardy to become their new striker, but ultimately settled for spending €20M on Lucas Perez from Deportivo following Vardy's rejection.
+
+Now, let's look at the graph for individual players.
+
+```{r}
+
+# Filter for Premier League 2015/16 shots and generate predictions
+premier_df_player <- xg_df_encoded %>%
+  filter(competition_name == "England - Premier League", season_name == "2015/2016") %>%
+  mutate(predicted_xg = predict(model_descriptive, newdata = ., type = "response"))
+
+# Aggregate the data at the player level
+player_summary <- premier_df_player %>%
+  group_by(player.name) %>%  # Group by player name
+  # Normalize the team names for joining
+  summarise(
+    team_name = first(team.name),
+    actual_goals = sum(as.numeric(is_goal), na.rm = TRUE),
+    expected_goals = sum(predicted_xg, na.rm = TRUE),
+    shots = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    team_norm = stri_trans_general(team_name, "Latin-ASCII"),
+    goal_diff = actual_goals - expected_goals) %>%
+  arrange(desc(actual_goals)) 
+
+# Top 10 overperforming players (largest positive goal_diff)
+top_overperformers_players <- player_summary %>%
+  arrange(desc(goal_diff)) %>%
+  slice_head(n = 10)
+print("Top 10 Overperforming Players:")
+print(top_overperformers_players)
+
+# Top 10 underperforming players (most negative goal_diff)
+top_underperformers_players <- player_summary %>%
+  arrange(goal_diff) %>%
+  slice_head(n = 10)
+print("Top 10 Underperforming Players:")
+print(top_underperformers_players)
+
+# Normalize team names in your team logos lookup table:
+team_logos <- team_logos %>%
+  mutate(team_norm = stri_trans_general(team.name, "Latin-ASCII"))
+
+# Also normalize team names in your team_summary data:
+team_summary <- team_summary %>%
+  mutate(team_norm = stri_trans_general(team.name, "Latin-ASCII"))
+
+# Join with the team logos lookup table using the normalized team name
+player_summary_with_logo <- left_join(player_summary, team_logos, by = "team_norm")
+
+#filter out players with 0 goals before plotting
+player_summary_with_logo_filtered <- player_summary_with_logo %>%
+  filter(actual_goals > 1)
+
+ggplot(player_summary_with_logo_filtered, aes(x = expected_goals, y = actual_goals, label = player.name)) +
+  # Use geom_image() to show the team logo at each point
+  geom_image(aes(image = logo_path), size = 0.05) +  # Adjust size as needed
+  # Overlay text labels for the players
+  geom_text_repel(
+    size = 3,
+    max.overlaps = 15,
+    box.padding = 0.35,
+    point.padding = 0.5
+  ) +
+  # Add a dashed y = x line
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  labs(
+    title = "Actual Goals vs Expected Goals (xG) in 2015/16 EPL",
+    x = "Expected Goals (xG)",
+    y = "Actual Goals"
+  ) +
+  theme_minimal(base_size = 12)
+
+```
+
+Now, we look at the individual player actual vs expected goal tallies. Interestingly enough, two of the three players who had the greatest overperformance in front of goal were Leicester City's Riyad Mahrez and Jamie Vardy. Mahrez scored 17 goals from 10.4 expected goals, while Vardy scored 24 goals from 18.6 expected goals. This overperformance in front of goal powered Leicester City to win the Premier League title despite being 5000-1 underdogs at the start of the season. As our results would indicate, this performance was not sustainable, which led to Leicester city almost being relegated in the following season
+
+Now that we have studied the English Premier League in 2015/16, let's look at the Spanish La Liga in that same 2015/16 season.
+
+```{r}
+
+# Filter for La Liga 2015/16
+la_liga_df_team <- xg_df_encoded %>%
+  filter(competition_name == "Spain - La Liga", season_name == "2015/2016") %>%
+  mutate(predicted_xg = predict(model_descriptive, newdata = ., type = "response"))
+
+# Aggregate data at the team level and add a column for actual minus expected goals
+team_summary <- la_liga_df_team %>%
+  group_by(team.name) %>%
+  summarise(
+    actual_goals = sum(as.numeric(is_goal), na.rm = TRUE),
+    expected_goals = sum(predicted_xg, na.rm = TRUE),
+    shots = n()
+  ) %>%
+  mutate(goal_diff = actual_goals - expected_goals)
+
+# Top 10 overperforming teams (largest positive goal_diff)
+top_overperformers <- team_summary %>%
+  arrange(desc(goal_diff)) %>%
+  slice_head(n = 10)
+print("Top 10 Overperformers:")
+print(top_overperformers)
+
+# Top 10 underperforming teams (lowest, i.e. most negative goal_diff)
+top_underperformers <- team_summary %>%
+  arrange(goal_diff) %>%
+  slice_head(n = 10)
+print("Top 10 Underperformers:")
+print(top_underperformers)
+
+# Normalize team names in your team logos lookup table:
+team_logos <- team_logos %>%
+  mutate(team_norm = stri_trans_general(team.name, "Latin-ASCII"))
+
+# Also normalize team names in your team_summary data:
+team_summary <- team_summary %>%
+  mutate(team_norm = stri_trans_general(team.name, "Latin-ASCII"))
+
+# Then join on the normalized team names:
+team_summary_with_logo <- left_join(team_summary, team_logos, by = "team_norm")
+
+ggplot(team_summary_with_logo, aes(x = expected_goals, y = actual_goals)) +
+  geom_image(aes(image = logo_path), size = 0.07) +  # Adjust size as needed
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  labs(
+    title = "Actual Goals vs Expected Goals (xG) in 2015/16 La Liga",
+    x = "Expected Goals (xG)",
+    y = "Actual Goals"
+  ) +
+  theme_minimal(base_size = 12)
+
+```
+
+Barcelona and Real Madrid were miles ahead of the rest of the league in 2015/16! They each scored the most actual goals, while having the two highest actual vs. expected goal differentials.
+
+Now let's look at the graph for individual players.
+
+```{r}
+
+# Filter for La Liga 2015/16 shots and generate predictions
+la_liga_df_player <- xg_df_encoded %>%
+  filter(competition_name == "Spain - La Liga", season_name == "2015/2016") %>%
+  mutate(predicted_xg = predict(model_descriptive, newdata = ., type = "response"))
+
+# Aggregate the data at the player level
+player_summary <- la_liga_df_player %>%
+  group_by(player.name) %>%  # Group by player name
+  # Normalize the team names for joining
+  summarise(
+    team_name = first(team.name),
+    actual_goals = sum(as.numeric(is_goal), na.rm = TRUE),
+    expected_goals = sum(predicted_xg, na.rm = TRUE),
+    shots = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    team_norm = stri_trans_general(team_name, "Latin-ASCII"),
+    goal_diff = actual_goals - expected_goals) %>%
+  arrange(desc(actual_goals)) 
+
+# Top 10 overperforming players (largest positive goal_diff)
+top_overperformers_players <- player_summary %>%
+  arrange(desc(goal_diff)) %>%
+  slice_head(n = 10)
+print("Top 10 Overperforming Players:")
+print(top_overperformers_players)
+
+# Top 10 underperforming players (most negative goal_diff)
+top_underperformers_players <- player_summary %>%
+  arrange(goal_diff) %>%
+  slice_head(n = 10)
+print("Top 10 Underperforming Players:")
+print(top_underperformers_players)
+
+# Normalize team names in your team logos lookup table:
+team_logos <- team_logos %>%
+  mutate(team_norm = stri_trans_general(team.name, "Latin-ASCII"))
+
+# Also normalize team names in your team_summary data:
+team_summary <- team_summary %>%
+  mutate(team_norm = stri_trans_general(team.name, "Latin-ASCII"))
+
+# Join with the team logos lookup table using the normalized team name
+player_summary_with_logo <- left_join(player_summary, team_logos, by = "team_norm")
+
+#filter out players with 0 goals before plotting
+player_summary_with_logo_filtered <- player_summary_with_logo %>%
+  filter(actual_goals > 1)
+
+ggplot(player_summary_with_logo_filtered, aes(x = expected_goals, y = actual_goals, label = player.name)) +
+  # Use geom_image() to show the team logo at each point
+  geom_image(aes(image = logo_path), size = 0.05) +  # Adjust size as needed
+  # Overlay text labels for the players
+  geom_text_repel(
+    size = 3,
+    max.overlaps = 15,
+    box.padding = 0.35,
+    point.padding = 0.5
+  ) +
+  # Add a dashed y = x line
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  labs(
+    title = "Actual Goals vs Expected Goals (xG) in 2015/16 La Liga",
+    x = "Expected Goals (xG)",
+    y = "Actual Goals"
+  ) +
+  theme_minimal(base_size = 12)
+
+```
+
+As expected from the team graph, 6 of the 10 players who most outperformed their expected goal tallies play for Real Madrid or Barcelona.
+
+This makes sense, given the purpose of an expected goals model. An expected goals model merely estimates the probability of a goal given the pre-shot context. It does not, however, consider the quality of the player taking the shot. This is why we often see elite players have the largest overperformance relative to their historical expected goals, because they are clinical players who can convert difficult chances at a higher rate than the average player.
+
+This limits the predictive power of simple expected goals models, as they are designed to analyze historical performance and not meant to be predictive. [However, there are experimental approaches that use Bayesian methodologies to explore the influence of a particular player or position on predicting goal probabilities.](https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2024.1348983/full)
+
+# Section IV: Conclusion
+
+In this R markdown notebook, we have explored how shooting and passing decisions have evolved over time and created our own expected goals model. We discovered that the game has evolved, with teams taking a lower share of long shots and long passes than we observed 50 years ago. Instead, teams have come to favor retaining possession more, playing a higher share of short passes and spurning speculative shot attempts in favor of working harder to generate higher probability goal-scoring opportunities.
+
+These findings align with the output from our expected goals model. Goal probability decreases exponentially the further back a player elects to shoot from. However, we noticed that the xG model does not account for player-specific finishing quality. This is a known limitation of classical xG models, which treat all players equally regardless of individual skill. Future work could explore these player-specific adjustments! Overall, the reduction in average shot and pass distance over time, particularly the concentration of shots inside the box in recent tournaments has clearly evolved: Football has thus become a much more efficient game.
