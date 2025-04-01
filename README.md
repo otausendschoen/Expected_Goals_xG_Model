@@ -475,11 +475,6 @@ trend - without assuming a strictly linear relationship.
       theme_minimal() +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-    ## Warning: Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.
-    ## ℹ Please use `linewidth` instead.
-    ## This warning is displayed once every 8 hours.
-    ## Call `lifecycle::last_lifecycle_warnings()` to see where this warning was generated.
-
     ## `geom_smooth()` using formula = 'y ~ x'
 
 ![](README_files/figure-markdown_strict/unnamed-chunk-14-1.png)
