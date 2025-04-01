@@ -1,7 +1,9 @@
 # Geospatial Final Exam
 
 **Authors**: Tirdod Behbehani, Oliver Tausendschön, Adrian Alejandro
-Vacca Bonilla **Date**: 2025-03-24
+Vacca Bonilla
+
+**Date**: 2025-03-24
 
 # Introduction
 
