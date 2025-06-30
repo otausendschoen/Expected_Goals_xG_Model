@@ -1,6 +1,6 @@
 ---
-title: "Geospatial Data Science: Building an Expected Goals (xG) Model"
-author: "Tirdod Behbehani, Oliver Tausendschön, Adrian Alejandro Vacca Bonilla"
+title: "Geospatial Final Exam"
+author: "Oliver Tausendschön, Adrian Alejandro Vacca Bonilla, Tirdod Behbehani"
 date: "2025-03-24"
 output: html_document
 ---
@@ -54,88 +54,81 @@ In general, the package is used in the following way:
 -   Download all event data for those matches
 -   Do analysis on subsets of this data. For example, we will start analyzing how shots behave over time below.
 
-In general, we can use the following code to obtain the data via the package's API. However, the dataset that we use to train our model is large and computationally costly, so we merely load it as a CSV for this iteration. Nevertheless, the code we used to obtain the model training data is commented out below:
-
-
-```{r}
-shots_df <- read_csv(unz("shots_new.csv.zip", "shots_new.csv"))
-```
+In general, we can use the following code to obtain the data via the package's API. We use the API to load the data to power the heatmaps and shot charts we see in Section II, which only use FIFA World Cup data. However, the dataset that we use to train our model is very big and covers more competitions, so we decided to attach it as a CSV. Nevertheless, the code we used to obtain the model training data is commented out below:
 
 ```{r}
 
-# #Pulling StatsBomb Free Data Into R
-# Comps <- FreeCompetitions()
-# comps_shots <- Comps %>%
-#   filter(
-#     competition_gender == 'male',
-#     !competition_name %in% c('FIFA U20 World Cup', 'Indian Super league', 'Major League Soccer', 'North American League')
-#   )
-# 
-# Matches <- FreeMatches(Comps)
-# 
-# Matches_Shots <- Matches
-# 
-# StatsBombData_Shots <- free_allevents(MatchesDF = Matches_Shots, Parallel = T)
-# 
-# StatsBombData_Shots = allclean(StatsBombData_Shots)
-# 
-# shots <- StatsBombData_Shots %>%
-#   filter(type.name == "Shot", !is.na(location)) %>%
-#   unnest_wider(location, names_sep = "_") %>%
-#   rename(x = location_1, y = location_2)
-# 
-# shots <- shots %>%
-#   left_join(
-#     Matches %>%
-#       select(match_id, match_date),
-#     by = "match_id"
-#   ) %>%
-#   left_join(
-#     Comps %>%
-#       select(competition_id, season_id, competition_name, season_name),
-#     by = c("competition_id", "season_id")
-#   ) %>%
-#   mutate(match_date = as.Date(match_date))
-# 
-# shots_clean <- shots %>%
-#   select(
-#     -carry.end_location,
-#     -goalkeeper.end_location,
-#     -tactics.lineup,
-#     -related_events,
-#     -shot.freeze_frame,
-#     -pass.end_location
-#   ) %>%
-#   unnest_wider(shot.end_location, names_sep = "_") %>%
-#   rename(
-#     shot.end_x = shot.end_location_1,
-#     shot.end_y = shot.end_location_2
-#   )
-# 
-# write_csv(shots_clean, "shots_new.csv")
+#Pulling StatsBomb Free Data Into R
+Comps <- FreeCompetitions()
+comps_shots <- Comps %>%
+  filter(
+    competition_gender == 'male',
+    !competition_name %in% c('FIFA U20 World Cup', 'Indian Super league', 'Major League Soccer', 'North American League')
+  )
+
+Matches <- FreeMatches(Comps)
+
+Matches_Shots <- Matches
+
+StatsBombData_Shots <- free_allevents(MatchesDF = Matches_Shots, Parallel = T)
+
+StatsBombData_Shots = allclean(StatsBombData_Shots)
+
+shots <- StatsBombData_Shots %>%
+  filter(type.name == "Shot", !is.na(location)) %>%
+  unnest_wider(location, names_sep = "_") %>%
+  rename(x = location_1, y = location_2)
+
+shots <- shots %>%
+  left_join(
+    Matches %>%
+      select(match_id, match_date),
+    by = "match_id"
+  ) %>%
+  left_join(
+    Comps %>%
+      select(competition_id, season_id, competition_name, season_name),
+    by = c("competition_id", "season_id")
+  ) %>%
+  mutate(match_date = as.Date(match_date))
+
+shots_clean <- shots %>%
+  select(
+    -carry.end_location,
+    -goalkeeper.end_location,
+    -tactics.lineup,
+    -related_events,
+    -shot.freeze_frame,
+    -pass.end_location
+  ) %>%
+  unnest_wider(shot.end_location, names_sep = "_") %>%
+  rename(
+    shot.end_x = shot.end_location_1,
+    shot.end_y = shot.end_location_2
+  )
+
+shots_df <- shots_clean
+
+#write_csv(shots_clean, "shots.csv")
 
 ```
 
-Another important point is that we filtered our shots data to just include major men's competitions. This leaves us with about 70,000 shots to train our model with.This was the only possibility to get data as it was too big otherwise.
+Another important point is that we filtered our shots data to just include major men's competitions. This leaves us with about 70,000 shots to train our model with.
+
+On the other hand, the data for passes only includes 2 specific seasons for computational efficiency - and this is already includes about 200,000 observations.
 
 Before addressing our research question, we shall do some some preliminary data exploration to understand and get an overview of the data.
 
 ```{r, message=FALSE}
 
-# View column names
-colnames(shots_df)
+#names(shots_df)
 
-# Glimpse the structure of the data
-glimpse(shots_df)
-
-# Get number of rows and columns
-dim(shots_df)
-
+head(shots_df[, -c(1,2,3)])
 ```
 
-As we can see, there are in total 121 columns and 70,553 observations. These observations are all seasons for most tournaments but filtered for only shots. The observations for passes on the other hand can be found in the other dataset.
+As we can see, there are in total 180 columns and 70,553 observations. These observations are all seasons for most tournaments but filtered for only shots. The observations for passes on the other hand can be found in the other dataset.
 
-Before we start the analysis, we do some basic data pre processing and also remove some of these redundant columns that we do not require.
+Before we start the analysis, we do some basic data pre processing and also remove some of these redundant 186 columns that we do not require.
 
 ## Data Pre-Processing
 
@@ -277,6 +270,7 @@ hist(shots$shot_distance, breaks = 30, main = "Shot Distance Distribution", xlab
 ```
 
 Most importantly, the histogram shows how far most shots are taken from the goal. We observe a clear peak at shorter distances, indicating that many shots come from inside or near the penalty box. However, there are also a number of longer-range attempts, suggesting variation in shooting strategy across players or teams.
+
 
 Now, let's look at how shot distances have changed over time. For convenience, we include a trendline using LOESS (Locally Estimated Scatterplot Smoothing), regression method that captures the underlying trend - without assuming a strictly linear relationship.
 
@@ -834,8 +828,85 @@ This makes sense, given the purpose of an expected goals model. An expected goal
 
 This limits the predictive power of simple expected goals models, as they are designed to analyze historical performance and not meant to be predictive. [However, there are experimental approaches that use Bayesian methodologies to explore the influence of a particular player or position on predicting goal probabilities.](https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2024.1348983/full)
 
-# Section IV: Conclusion
+# Section V: Conclusion
 
-In this R markdown notebook, we have explored how shooting decisions have evolved over time and created our own expected goals model. We discovered that the game has evolved, with teams taking a lower share of long shots than we observed 50 years ago. Instead, teams have come to spurn speculative shot attempts in favor of working harder to generate higher probability goal-scoring opportunities.
+In this R markdown notebook, we have explored how shooting and passing decisions have evolved over time and created our own expected goals model. We discovered that the game has evolved, with teams taking a lower share of long shots and long passes than we observed 50 years ago. Instead, teams have come to favor retaining possession more, playing a higher share of short passes and spurning speculative shot attempts in favor of working harder to generate higher probability goal-scoring opportunities.
 
-These findings align with the output from our expected goals model. Goal probability decreases exponentially the further back a player elects to shoot from. However, we noticed that the xG model does not account for player-specific finishing quality. This is a known limitation of classical xG models, which treat all players equally regardless of individual skill. Future work could explore these player-specific adjustments! Overall, the reduction in average shot distance over time, particularly the concentration of shots inside the box in recent tournaments has clearly evolved: Football has thus become a much more efficient game.
+These findings align with the output from our expected goals model. Goal probability decreases exponentially the further back a player elects to shoot from. However, we noticed that the xG model does not account for player-specific finishing quality. This is a known limitation of classical xG models, which treat all players equally regardless of individual skill. Future work could explore these player-specific adjustments! Overall, the reduction in average shot and pass distance over time, particularly the concentration of shots inside the box in recent tournaments has clearly evolved: Football has thus become a much more efficient game.
+
+# Appendix: For interested Messi Fans.
+
+**Lionel Messi as top player**
+
+```{r}
+shots %>%
+  count(player.name, sort = TRUE) %>%
+  slice_max(n, n = 10) %>%
+  ggplot(aes(x = reorder(player.name, n), y = n)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 10 Players by Total Shot Volume", x = "Player", y = "Shots")
+
+```
+
+**Lionel Messi Shots in 2022 FIFA World:**
+
+For those readers that are keen on learning how Lionel Messi performs in the FIFA, the following section shall analyze this briefly.
+
+To analyze Lionel Messi's shooting performance in the 2022 FIFA World Cup, we first filter his shots from the dataset.
+
+```{r}
+# Filter shots from Lionel Messi inside the box
+shots.messi <- shots_wc %>%
+  filter(
+    type.name == "Shot",
+    player.id == 5503  # Lionel Messi's ID
+  ) %>%
+  mutate(
+    goal = ifelse(shot.outcome.name == "Goal", "Goal", "Missed")  # Define goal/miss categories
+  )
+```
+
+The following plot shows the trajectories of Messi’s shots during the tournament, with goals highlighted in red and missed shots in blue.
+
+```{r, message=FALSE}
+# Plot pitch with colored shots
+create_Pitch() +
+  geom_segment(
+    data = shots.messi, 
+    aes(
+      x = location.x, 
+      y = location.y,
+      xend = shot.end_location.x, 
+      yend = shot.end_location.y,
+      color = goal  # Color by goal/miss
+    ),  
+    lineend = "round", 
+    size = 0.5,
+    arrow = arrow(length = unit(0.07, "inches"), ends = "last", type = "open")
+  ) +
+  
+  # Define colors for shot outcomes
+  scale_color_manual(values = c("Goal" = "red", "Missed" = "blue")) +  
+
+  # Labels and formatting
+  labs(
+    title = "Lionel Messi",
+    subtitle = "FIFA World Cup Shots, 2002",
+    color = "Shot Outcome"
+  ) +
+
+  # Adjust field proportions
+  scale_y_reverse() +
+  coord_fixed(ratio = 105 / 100)+
+   theme(
+    plot.margin = margin(1, 1, 1, 1),
+    legend.position = "bottom",  # Places legend below
+    legend.title = element_text(face = "bold"),  # Bold legend title
+    legend.key.width = unit(2.5, "cm"),  # Adjust legend size
+    legend.text = element_text(size = 10)  # Set legend text size,
+  )
+
+```
+
+Messi mostly takes his shots from inside or near the penalty area, rarely shooting from outside the box. This suggests he favors close-range finishing over long-distance attempts, and his goals—highlighted with red arrows—are primarily clustered around the center of the penalty area.

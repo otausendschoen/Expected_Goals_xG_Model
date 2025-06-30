@@ -1,19 +1,11 @@
-# Geospatial Final Exam
-
-**Authors**: Tirdod Behbehani, Oliver Tausendschön, Adrian Alejandro
-Vacca Bonilla
-
-**Date**: 2025-03-24
-
 # Introduction
 
-As football enthusiasts, we are keen on analyzing games in great depth.
-Fortunately, the growing availability of open football data provides
-many opportunities to do so. This was one of the main motivations for
-our project. We set out to explore how shots have evolved over time, and
-whether we could build our own expected goals (xG) model — a tool widely
-used in football analytics to estimate the probability of a shot
-resulting in a goal.
+As football tracking data improves, the ability to derive meaningful
+insights becomes much more accessible to the general public. In this
+project, we set out to explore how football shots have evolved over
+time, and whether we could build our own expected goals (xG) model — a
+tool widely used in football analytics to estimate the probability of a
+shot resulting in a goal.
 
 To do this, we use open-access data provided by StatsBomb. For each
 event in a match (like a shot, pass, dribble, save, or duel), StatsBomb
@@ -44,16 +36,26 @@ In general, the package is used in the following way:
     analyzing how shots behave over time below.
 
 In general, we can use the following code to obtain the data via the
-package’s API. We use the API to load the data to power the heatmaps and
-shot charts we see in Section II, which only use FIFA World Cup data.
-However, the dataset that we use to train our model is very big and
-covers more competitions, so we decided to attach it as a CSV.
-Nevertheless, the code we used to obtain the model training data is
-commented out below:
+package’s API. However, the dataset that we use to train our model is
+large and computationally costly, so we merely load it as a CSV for this
+iteration. Nevertheless, the code we used to obtain the model training
+data is commented out below:
+
+    shots_df <- read_csv(unz("shots_new.csv.zip", "shots_new.csv"))
+
+    ## Rows: 70553 Columns: 121
+    ## ── Column specification ────────────────────────────────────────────────────────────────────────────────────────────────────
+    ## Delimiter: ","
+    ## chr  (14): id, play_pattern.name, player.name, position.name, possession_team, shot.body_part.name, shot.key_pass_id, sh...
+    ## dbl  (15): duration, index, location.x, location.y, match_id, minute, period, player.id, possession_team.name, possessio...
+    ## lgl  (90): 50_50, bad_behaviour_card, ball_receipt_outcome, ball_recovery_recovery_failure, block_deflection, block_save...
+    ## date  (1): match_date
+    ## time  (1): timestamp
+    ## 
+    ## ℹ Use `spec()` to retrieve the full column specification for this data.
+    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
 
     # #Pulling StatsBomb Free Data Into R
-    # library(tidyverse)
-    # library(StatsBombR)
     # Comps <- FreeCompetitions()
     # comps_shots <- Comps %>%
     #   filter(
@@ -65,22 +67,12 @@ commented out below:
     # 
     # Matches_Shots <- Matches
     # 
-    # Matches_Passes <- Matches %>%
-    #   filter(year(match_date) >= 2000)
-    # 
     # StatsBombData_Shots <- free_allevents(MatchesDF = Matches_Shots, Parallel = T)
-    # StatsBombData_Passes <- free_allevents(MatchesDF = Matches_Passes, Parallel = T)
     # 
     # StatsBombData_Shots = allclean(StatsBombData_Shots)
-    # StatsBombData_Passes = allclean(StatsBombData_Passes)
     # 
     # shots <- StatsBombData_Shots %>%
     #   filter(type.name == "Shot", !is.na(location)) %>%
-    #   unnest_wider(location, names_sep = "_") %>%
-    #   rename(x = location_1, y = location_2)
-    # 
-    # passes <- StatsBombData_Passes %>%
-    #   filter(type.name == "Pass", !is.na(location)) %>%
     #   unnest_wider(location, names_sep = "_") %>%
     #   rename(x = location_1, y = location_2)
     # 
@@ -112,106 +104,201 @@ commented out below:
     #     shot.end_y = shot.end_location_2
     #   )
     # 
-    # passes <- passes %>%
-    #   left_join(
-    #     Matches %>%
-    #       select(match_id, match_date),
-    #     by = "match_id"
-    #   ) %>%
-    #   left_join(
-    #     Comps %>%
-    #       select(competition_id, season_id, competition_name, season_name),
-    #     by = c("competition_id", "season_id")
-    #   ) %>%
-    #   mutate(match_date = as.Date(match_date))
-    # 
-    # passes_clean <- passes %>%
-    #   select(
-    #     -carry.end_location,
-    #     -goalkeeper.end_location,
-    #     -tactics.lineup,
-    #     -related_events,
-    #     -shot.end_location,
-    #     -shot.freeze_frame
-    #   ) %>%
-    #   unnest_wider(pass.end_location, names_sep = "_") %>%
-    #   rename(
-    #     pass.end_x = pass.end_location_1,
-    #     pass.end_y = pass.end_location_2
-    #   )
-    # 
-    # write_csv(shots_clean, "shots.csv")
-    # write_csv(passes_clean, "passes.csv")
+    # write_csv(shots_clean, "shots_new.csv")
 
 Another important point is that we filtered our shots data to just
 include major men’s competitions. This leaves us with about 70,000 shots
 to train our model with.This was the only possibility to get data as it
 was too big otherwise.
 
-On the other hand, the data for passes only includes 2 specific seasons
-for computational efficiency - and this is already includes about
-200,000 observations.
-
-    shots_df <- read_csv(unz("shots_new.csv.zip", "shots_new.csv"))
-
-    ## Rows: 70553 Columns: 121
-    ## ── Column specification ─────────────────────────────────────────────────────────────────
-    ## Delimiter: ","
-    ## chr  (14): id, play_pattern.name, player.name, position.name, possession_team, shot.b...
-    ## dbl  (15): duration, index, location.x, location.y, match_id, minute, period, player....
-    ## lgl  (90): 50_50, bad_behaviour_card, ball_receipt_outcome, ball_recovery_recovery_fa...
-    ## date  (1): match_date
-    ## time  (1): timestamp
-    ## 
-    ## ℹ Use `spec()` to retrieve the full column specification for this data.
-    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
-
-    passes_df <- read_csv(unz("passes.csv.zip", "passes.csv"))
-
-    ## Rows: 198824 Columns: 180
-    ## ── Column specification ─────────────────────────────────────────────────────────────────
-    ## Delimiter: ","
-    ## chr   (16): id, type.name, possession_team.name, play_pattern.name, team.name, player...
-    ## dbl   (36): index, period, minute, second, possession, duration, x, y, type.id, posse...
-    ## lgl  (126): under_pressure, counterpress, out, off_camera, tactics.formation, pass.ae...
-    ## date   (1): match_date
-    ## time   (1): timestamp
-    ## 
-    ## ℹ Use `spec()` to retrieve the full column specification for this data.
-    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
-
 Before addressing our research question, we shall do some some
 preliminary data exploration to understand and get an overview of the
 data.
 
-    #names(shots_df)
+    # View column names
+    colnames(shots_df)
 
-    head(shots_df[, -c(1,2,3)])
+    ##   [1] "50_50"                            "bad_behaviour_card"               "ball_receipt_outcome"            
+    ##   [4] "ball_recovery_recovery_failure"   "block_deflection"                 "block_save_block"                
+    ##   [7] "clearance_aerial_won"             "clearance_body_part"              "clearance_head"                  
+    ##  [10] "clearance_left_foot"              "clearance_right_foot"             "counterpress"                    
+    ##  [13] "dribble_nutmeg"                   "dribble_outcome"                  "duel_outcome"                    
+    ##  [16] "duel_type"                        "duration"                         "foul_committed_advantage"        
+    ##  [19] "foul_committed_card"              "foul_committed_penalty"           "foul_won_advantage"              
+    ##  [22] "foul_won_defensive"               "foul_won_penalty"                 "goalkeeper_body_part"            
+    ##  [25] "goalkeeper_outcome"               "goalkeeper_position"              "goalkeeper_technique"            
+    ##  [28] "goalkeeper_type"                  "id"                               "index"                           
+    ##  [31] "injury_stoppage_in_chain"         "interception_outcome"             "location.x"                      
+    ##  [34] "location.y"                       "match_id"                         "minute"                          
+    ##  [37] "off_camera"                       "out"                              "pass_aerial_won"                 
+    ##  [40] "pass_angle"                       "pass_assisted_shot_id"            "pass_body_part"                  
+    ##  [43] "pass_cross"                       "pass_cut_back"                    "pass_deflected"                  
+    ##  [46] "pass_goal_assist"                 "pass_height"                      "pass_inswinging"                 
+    ##  [49] "pass_length"                      "pass_outcome"                     "pass_outswinging"                
+    ##  [52] "pass_recipient"                   "pass_recipient_id"                "pass_shot_assist"                
+    ##  [55] "pass_switch"                      "pass_technique"                   "pass_through_ball"               
+    ##  [58] "pass_type"                        "period"                           "play_pattern.name"               
+    ##  [61] "player.name"                      "player.id"                        "position.name"                   
+    ##  [64] "possession_team.name"             "possession_team"                  "possession_team_id"              
+    ##  [67] "second"                           "shot.aerial_won"                  "shot.body_part.name"             
+    ##  [70] "shot.end_x"                       "shot.end_y"                       "shot.first_time"                 
+    ##  [73] "shot.key_pass_id"                 "shot.one_on_one"                  "shot.outcome.name"               
+    ##  [76] "shot.statsbomb_xg"                "shot.technique.name"              "shot.type.name"                  
+    ##  [79] "substitution_outcome"             "substitution_outcome_id"          "substitution_replacement"        
+    ##  [82] "substitution_replacement_id"      "tactics"                          "team.name"                       
+    ##  [85] "team_id"                          "timestamp"                        "type"                            
+    ##  [88] "under_pressure"                   "ball_recovery_offensive"          "block_offensive"                 
+    ##  [91] "dribble_overrun"                  "foul_committed_type"              "miscontrol_aerial_won"           
+    ##  [94] "foul_committed_offensive"         "shot.deflected"                   "pass_miscommunication"           
+    ##  [97] "pass_no_touch"                    "goalkeeper_punched_out"           "pass_straight"                   
+    ## [100] "shot.open_goal"                   "dribble_no_touch"                 "goalkeeper_shot_saved_off_target"
+    ## [103] "shot_saved_off_target"            "goalkeeper_shot_saved_to_post"    "shot_saved_to_post"              
+    ## [106] "clearance_other"                  "goalkeeper_success_out"           "goalkeeper_success_in_play"      
+    ## [109] "shot.redirect"                    "goalkeeper_lost_out"              "shot.follows_dribble"            
+    ## [112] "half_start_late_video_start"      "player_off_permanent"             "pass_backheel"                   
+    ## [115] "goalkeeper_lost_in_play"          "half_end_early_video_end"         "goalkeeper_penalty_saved_to_post"
+    ## [118] "goalkeeper_saved_to_post"         "match_date"                       "competition_name"                
+    ## [121] "season_name"
 
-    ## # A tibble: 6 × 118
-    ##   ball_recovery_recovery_failure block_deflection block_save_block clearance_aerial_won
-    ##   <lgl>                          <lgl>            <lgl>            <lgl>               
-    ## 1 NA                             NA               NA               NA                  
-    ## 2 NA                             NA               NA               NA                  
-    ## 3 NA                             NA               NA               NA                  
-    ## 4 NA                             NA               NA               NA                  
-    ## 5 NA                             NA               NA               NA                  
-    ## 6 NA                             NA               NA               NA                  
-    ## # ℹ 114 more variables: clearance_body_part <lgl>, clearance_head <lgl>,
-    ## #   clearance_left_foot <lgl>, clearance_right_foot <lgl>, counterpress <lgl>,
-    ## #   dribble_nutmeg <lgl>, dribble_outcome <lgl>, duel_outcome <lgl>, duel_type <lgl>,
-    ## #   duration <dbl>, foul_committed_advantage <lgl>, foul_committed_card <lgl>,
-    ## #   foul_committed_penalty <lgl>, foul_won_advantage <lgl>, foul_won_defensive <lgl>,
-    ## #   foul_won_penalty <lgl>, goalkeeper_body_part <lgl>, goalkeeper_outcome <lgl>,
-    ## #   goalkeeper_position <lgl>, goalkeeper_technique <lgl>, goalkeeper_type <lgl>, …
+    # Glimpse the structure of the data
+    glimpse(shots_df)
 
-As we can see, there are in total 180 columns and 70,553 observations.
+    ## Rows: 70,553
+    ## Columns: 121
+    ## $ `50_50`                          [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ bad_behaviour_card               [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ ball_receipt_outcome             [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ ball_recovery_recovery_failure   [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ block_deflection                 [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ block_save_block                 [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ clearance_aerial_won             [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ clearance_body_part              [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ clearance_head                   [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ clearance_left_foot              [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ clearance_right_foot             [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ counterpress                     [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ dribble_nutmeg                   [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ dribble_outcome                  [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ duel_outcome                     [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ duel_type                        [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ duration                         [3m[38;5;246m<dbl>[39m[23m 0.052872[38;5;246m, [39m0.217872[38;5;246m, [39m0.445768[38;5;246m, [39m0.085298[38;5;246m, [39m0.402989[38;5;246m, [39m1.732516[38;5;246m, [39m0.209113[38;5;246m, [39m0.479048[38;5;246m, [39m0…
+    ## $ foul_committed_advantage         [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ foul_committed_card              [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ foul_committed_penalty           [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ foul_won_advantage               [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ foul_won_defensive               [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ foul_won_penalty                 [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_body_part             [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_outcome               [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_position              [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_technique             [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_type                  [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ id                               [3m[38;5;246m<chr>[39m[23m "c577e730-b9f5-44f2-9257-9e7730c23d7b"[38;5;246m, [39m"bbc2c68d-c096-483d-abf4-32c0175a0f55"[38;5;246m, [39m"…
+    ## $ index                            [3m[38;5;246m<dbl>[39m[23m 436[38;5;246m, [39m480[38;5;246m, [39m597[38;5;246m, [39m684[38;5;246m, [39m848[38;5;246m, [39m854[38;5;246m, [39m990[38;5;246m, [39m1193[38;5;246m, [39m1310[38;5;246m, [39m1316[38;5;246m, [39m1319[38;5;246m, [39m1521[38;5;246m, [39m1696[38;5;246m, [39m2009[38;5;246m, [39m2116…
+    ## $ injury_stoppage_in_chain         [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ interception_outcome             [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ location.x                       [3m[38;5;246m<dbl>[39m[23m 100.4[38;5;246m, [39m114.6[38;5;246m, [39m106.2[38;5;246m, [39m113.9[38;5;246m, [39m89.2[38;5;246m, [39m110.2[38;5;246m, [39m105.4[38;5;246m, [39m108.0[38;5;246m, [39m101.5[38;5;246m, [39m116.3[38;5;246m, [39m116.3[38;5;246m, [39m109.4…
+    ## $ location.y                       [3m[38;5;246m<dbl>[39m[23m 35.1[38;5;246m, [39m33.5[38;5;246m, [39m55.8[38;5;246m, [39m47.4[38;5;246m, [39m42.5[38;5;246m, [39m32.6[38;5;246m, [39m45.1[38;5;246m, [39m40.0[38;5;246m, [39m47.5[38;5;246m, [39m46.0[38;5;246m, [39m43.3[38;5;246m, [39m44.9[38;5;246m, [39m27.5[38;5;246m, [39m41.…
+    ## $ match_id                         [3m[38;5;246m<dbl>[39m[23m 3895302[38;5;246m, [39m3895302[38;5;246m, [39m3895302[38;5;246m, [39m3895302[38;5;246m, [39m3895302[38;5;246m, [39m3895302[38;5;246m, [39m3895302[38;5;246m, [39m3895302[38;5;246m, [39m3895302[38;5;246m, [39m…
+    ## $ minute                           [3m[38;5;246m<dbl>[39m[23m 6[38;5;246m, [39m7[38;5;246m, [39m11[38;5;246m, [39m13[38;5;246m, [39m16[38;5;246m, [39m16[38;5;246m, [39m18[38;5;246m, [39m24[38;5;246m, [39m27[38;5;246m, [39m28[38;5;246m, [39m28[38;5;246m, [39m34[38;5;246m, [39m37[38;5;246m, [39m43[38;5;246m, [39m45[38;5;246m, [39m50[38;5;246m, [39m58[38;5;246m, [39m59[38;5;246m, [39m64[38;5;246m, [39m67[38;5;246m, [39m70[38;5;246m,[39m…
+    ## $ off_camera                       [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ out                              [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_aerial_won                  [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_angle                       [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_assisted_shot_id            [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_body_part                   [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_cross                       [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_cut_back                    [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_deflected                   [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_goal_assist                 [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_height                      [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_inswinging                  [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_length                      [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_outcome                     [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_outswinging                 [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_recipient                   [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_recipient_id                [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_shot_assist                 [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_switch                      [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_technique                   [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_through_ball                [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_type                        [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ period                           [3m[38;5;246m<dbl>[39m[23m 1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m1[38;5;246m, [39m2[38;5;246m, [39m2[38;5;246m, [39m2[38;5;246m, [39m2[38;5;246m, [39m2[38;5;246m, [39m2[38;5;246m, [39m2[38;5;246m, [39m2[38;5;246m, [39m2[38;5;246m, [39m2[38;5;246m, [39m2[38;5;246m, [39m2[38;5;246m, [39m…
+    ## $ play_pattern.name                [3m[38;5;246m<chr>[39m[23m "From Free Kick"[38;5;246m, [39m"Regular Play"[38;5;246m, [39m"From Free Kick"[38;5;246m, [39m"From Corner"[38;5;246m, [39m"Regular Play"…
+    ## $ player.name                      [3m[38;5;246m<chr>[39m[23m "Leonardo Bittencourt"[38;5;246m, [39m"Piero Martín Hincapié Reyna"[38;5;246m, [39m"Julián Malatini"[38;5;246m, [39m"Jonath…
+    ## $ player.id                        [3m[38;5;246m<dbl>[39m[23m 8826[38;5;246m, [39m38004[38;5;246m, [39m51769[38;5;246m, [39m8221[38;5;246m, [39m3500[38;5;246m, [39m8221[38;5;246m, [39m34870[38;5;246m, [39m32289[38;5;246m, [39m3500[38;5;246m, [39m8221[38;5;246m, [39m32289[38;5;246m, [39m8804[38;5;246m, [39m3340…
+    ## $ position.name                    [3m[38;5;246m<chr>[39m[23m "Right Center Midfield"[38;5;246m, [39m"Left Wing Back"[38;5;246m, [39m"Right Center Back"[38;5;246m, [39m"Center Back"[38;5;246m, [39m"R…
+    ## $ possession_team.name             [3m[38;5;246m<dbl>[39m[23m 13[38;5;246m, [39m14[38;5;246m, [39m22[38;5;246m, [39m26[38;5;246m, [39m33[38;5;246m, [39m34[38;5;246m, [39m38[38;5;246m, [39m42[38;5;246m, [39m45[38;5;246m, [39m46[38;5;246m, [39m46[38;5;246m, [39m55[38;5;246m, [39m58[38;5;246m, [39m65[38;5;246m, [39m66[38;5;246m, [39m76[38;5;246m, [39m94[38;5;246m, [39m96[38;5;246m, [39m99[38;5;246m, [39m106[38;5;246m, [39m…
+    ## $ possession_team                  [3m[38;5;246m<chr>[39m[23m "Werder Bremen"[38;5;246m, [39m"Bayer Leverkusen"[38;5;246m, [39m"Werder Bremen"[38;5;246m, [39m"Bayer Leverkusen"[38;5;246m, [39m"Bayer …
+    ## $ possession_team_id               [3m[38;5;246m<dbl>[39m[23m 176[38;5;246m, [39m904[38;5;246m, [39m176[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m176[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m176[38;5;246m, [39m176[38;5;246m, [39m9…
+    ## $ second                           [3m[38;5;246m<dbl>[39m[23m 48[38;5;246m, [39m40[38;5;246m, [39m8[38;5;246m, [39m16[38;5;246m, [39m0[38;5;246m, [39m31[38;5;246m, [39m28[38;5;246m, [39m27[38;5;246m, [39m46[38;5;246m, [39m21[38;5;246m, [39m23[38;5;246m, [39m51[38;5;246m, [39m40[38;5;246m, [39m36[38;5;246m, [39m26[38;5;246m, [39m35[38;5;246m, [39m10[38;5;246m, [39m18[38;5;246m, [39m10[38;5;246m, [39m25[38;5;246m, [39m17[38;5;246m,[39m…
+    ## $ shot.aerial_won                  [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39mTRUE[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39mTRUE[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ shot.body_part.name              [3m[38;5;246m<chr>[39m[23m "Right Foot"[38;5;246m, [39m"Left Foot"[38;5;246m, [39m"Left Foot"[38;5;246m, [39m"Head"[38;5;246m, [39m"Left Foot"[38;5;246m, [39m"Head"[38;5;246m, [39m"Right Foot"…
+    ## $ shot.end_x                       [3m[38;5;246m<dbl>[39m[23m 101.6[38;5;246m, [39m118.1[38;5;246m, [39m113.4[38;5;246m, [39m114.1[38;5;246m, [39m101.4[38;5;246m, [39m116.4[38;5;246m, [39m106.1[38;5;246m, [39m120.0[38;5;246m, [39m103.2[38;5;246m, [39m118.7[38;5;246m, [39m118.2[38;5;246m, [39m115.…
+    ## $ shot.end_y                       [3m[38;5;246m<dbl>[39m[23m 35.2[38;5;246m, [39m35.7[38;5;246m, [39m46.8[38;5;246m, [39m46.8[38;5;246m, [39m41.3[38;5;246m, [39m38.1[38;5;246m, [39m44.9[38;5;246m, [39m42.9[38;5;246m, [39m47.1[38;5;246m, [39m43.9[38;5;246m, [39m42.1[38;5;246m, [39m44.0[38;5;246m, [39m36.6[38;5;246m, [39m39.…
+    ## $ shot.first_time                  [3m[38;5;246m<lgl>[39m[23m TRUE[38;5;246m, [39mTRUE[38;5;246m, [39mTRUE[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39mTRUE[38;5;246m, [39m[31mNA[39m[38;5;246m, [39mTRUE[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39mTRU…
+    ## $ shot.key_pass_id                 [3m[38;5;246m<chr>[39m[23m [31mNA[39m[38;5;246m, [39m"95ee2820-c4dc-44f2-9fe7-d24cb6edd881"[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m"f11e6dbe-665c-4c05-a7cb-aa361d8a…
+    ## $ shot.one_on_one                  [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39mTRUE[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m,[39m…
+    ## $ shot.outcome.name                [3m[38;5;246m<chr>[39m[23m "Blocked"[38;5;246m, [39m"Saved"[38;5;246m, [39m"Blocked"[38;5;246m, [39m"Blocked"[38;5;246m, [39m"Blocked"[38;5;246m, [39m"Wayward"[38;5;246m, [39m"Blocked"[38;5;246m, [39m"Goal"…
+    ## $ shot.statsbomb_xg                [3m[38;5;246m<dbl>[39m[23m 0.05664417[38;5;246m, [39m0.14338115[38;5;246m, [39m0.03818841[38;5;246m, [39m0.05278134[38;5;246m, [39m0.02127158[38;5;246m, [39m0.02966417[38;5;246m, [39m0.0822929…
+    ## $ shot.technique.name              [3m[38;5;246m<chr>[39m[23m "Normal"[38;5;246m, [39m"Normal"[38;5;246m, [39m"Normal"[38;5;246m, [39m"Normal"[38;5;246m, [39m"Normal"[38;5;246m, [39m"Normal"[38;5;246m, [39m"Normal"[38;5;246m, [39m"Normal"[38;5;246m, [39m"…
+    ## $ shot.type.name                   [3m[38;5;246m<chr>[39m[23m "Open Play"[38;5;246m, [39m"Open Play"[38;5;246m, [39m"Open Play"[38;5;246m, [39m"Open Play"[38;5;246m, [39m"Open Play"[38;5;246m, [39m"Open Play"[38;5;246m, [39m"Op…
+    ## $ substitution_outcome             [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ substitution_outcome_id          [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ substitution_replacement         [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ substitution_replacement_id      [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ tactics                          [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ team.name                        [3m[38;5;246m<chr>[39m[23m "Werder Bremen"[38;5;246m, [39m"Bayer Leverkusen"[38;5;246m, [39m"Werder Bremen"[38;5;246m, [39m"Bayer Leverkusen"[38;5;246m, [39m"Bayer …
+    ## $ team_id                          [3m[38;5;246m<dbl>[39m[23m 176[38;5;246m, [39m904[38;5;246m, [39m176[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m176[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m904[38;5;246m, [39m176[38;5;246m, [39m176[38;5;246m, [39m9…
+    ## $ timestamp                        [3m[38;5;246m<time>[39m[23m 00:06:48[38;5;246m, [39m00:07:40[38;5;246m, [39m00:11:08[38;5;246m, [39m00:13:16[38;5;246m, [39m00:16:00[38;5;246m, [39m00:16:31[38;5;246m, [39m00:18:28[38;5;246m, [39m00:24:27[38;5;246m, [39m…
+    ## $ type                             [3m[38;5;246m<chr>[39m[23m "Shot"[38;5;246m, [39m"Shot"[38;5;246m, [39m"Shot"[38;5;246m, [39m"Shot"[38;5;246m, [39m"Shot"[38;5;246m, [39m"Shot"[38;5;246m, [39m"Shot"[38;5;246m, [39m"Shot"[38;5;246m, [39m"Shot"[38;5;246m, [39m"Shot"[38;5;246m, [39m"…
+    ## $ under_pressure                   [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39mTRUE[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39mTRUE[38;5;246m, [39mTRUE[38;5;246m, [39mTRUE[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39mTRUE[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39mTRUE[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39mTRUE[38;5;246m, [39mTRU…
+    ## $ ball_recovery_offensive          [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ block_offensive                  [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ dribble_overrun                  [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ foul_committed_type              [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ miscontrol_aerial_won            [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ foul_committed_offensive         [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ shot.deflected                   [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_miscommunication            [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_no_touch                    [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_punched_out           [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_straight                    [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ shot.open_goal                   [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ dribble_no_touch                 [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_shot_saved_off_target [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ shot_saved_off_target            [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_shot_saved_to_post    [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ shot_saved_to_post               [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ clearance_other                  [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_success_out           [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_success_in_play       [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ shot.redirect                    [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_lost_out              [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ shot.follows_dribble             [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ half_start_late_video_start      [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ player_off_permanent             [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ pass_backheel                    [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_lost_in_play          [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ half_end_early_video_end         [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_penalty_saved_to_post [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ goalkeeper_saved_to_post         [3m[38;5;246m<lgl>[39m[23m [31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mNA[39m[38;5;246m, [39m[31mN[39m…
+    ## $ match_date                       [3m[38;5;246m<date>[39m[23m 2024-04-14[38;5;246m, [39m2024-04-14[38;5;246m, [39m2024-04-14[38;5;246m, [39m2024-04-14[38;5;246m, [39m2024-04-14[38;5;246m, [39m2024-04-14[38;5;246m, [39m2024-04-…
+    ## $ competition_name                 [3m[38;5;246m<chr>[39m[23m "Germany - 1. Bundesliga"[38;5;246m, [39m"Germany - 1. Bundesliga"[38;5;246m, [39m"Germany - 1. Bundesliga"[38;5;246m, [39m…
+    ## $ season_name                      [3m[38;5;246m<chr>[39m[23m "2023/2024"[38;5;246m, [39m"2023/2024"[38;5;246m, [39m"2023/2024"[38;5;246m, [39m"2023/2024"[38;5;246m, [39m"2023/2024"[38;5;246m, [39m"2023/2024"[38;5;246m, [39m"20…
+
+    # Get number of rows and columns
+    dim(shots_df)
+
+    ## [1] 70553   121
+
+As we can see, there are in total 121 columns and 70,553 observations.
 These observations are all seasons for most tournaments but filtered for
 only shots. The observations for passes on the other hand can be found
 in the other dataset.
 
 Before we start the analysis, we do some basic data pre processing and
-also remove some of these redundant 186 columns that we do not require.
+also remove some of these redundant columns that we do not require.
 
 ## Data Pre-Processing
 
@@ -270,52 +357,6 @@ also remove some of these redundant 186 columns that we do not require.
         #AngleDeviation
       )
 
-    passes<- passes_df %>%
-      dplyr::select(
-            id,
-        match_id,
-        competition_name,
-        season_name,
-        timestamp,
-        minute,
-        second,
-        period,
-        possession_team.name,
-        team.id,
-        team.name,
-        player.id,
-        player.name,
-        position.name,
-        play_pattern.name,
-        under_pressure,
-        location.x,
-        location.y,
-        pass.length, 
-        pass.angle, 
-        pass.end_x, 
-        pass.end_y, 
-        pass.aerial_won, 
-        pass.switch, 
-        pass.cross, 
-        pass.assisted_shot_id, 
-        pass.shot_assist, 
-        pass.inswinging, 
-        pass.deflected, 
-        pass.outswinging, 
-        pass.through_ball, 
-        pass.cut_back, 
-        pass.goal_assist, 
-        pass.recipient.id, 
-        pass.recipient.name, 
-        pass.height.name, 
-        pass.body_part.name, 
-        pass.type.name, 
-        pass.outcome.name, 
-        pass.technique.name, 
-        ball_receipt.outcome.name,
-        pass.no_touch
-      )
-
 To make life easier in the next sections, we calculate the shot distance
 from player to goal. StatsBomb uses a standard pitch coordinate system
 where:
@@ -333,16 +374,6 @@ We use Euclidean distance as our distance metric.
 
     shots <- shots %>%
       mutate(shot_distance = calculate_shot_distance(location.x, location.y))
-
-We do the same for the distance for the distance of the passes, from
-player to player.
-
-    calculate_pass_distance <- function(x1, y1, x2, y2) {
-      sqrt((x2 - x1)^2 + (y2 - y1)^2) * (105 / 120)
-    }
-
-    passes <- passes %>%
-      mutate(pass_distance = calculate_pass_distance(location.x, location.y, pass.end_x, pass.end_y))
 
 Similar to how we calculate the shot distance to the goal, we will
 calculate the shot angle to the goal.
@@ -404,37 +435,11 @@ As we can see above, the average distance when scoring a goal is much
 lower compared to the other shot outcomes such as being blocked or being
 saved.
 
-    passes %>%
-      mutate(pass.outcome.name = replace_na(pass.outcome.name, "Complete")) %>%
-      group_by(pass.outcome.name) %>%
-      summarise(
-        avg_distance = mean(pass_distance, na.rm = TRUE),
-        count = n()
-      ) %>%
-      arrange(avg_distance)
-
-    ## # A tibble: 6 × 3
-    ##   pass.outcome.name avg_distance  count
-    ##   <chr>                    <dbl>  <int>
-    ## 1 Complete                  17.1 154606
-    ## 2 Incomplete                23.6  38095
-    ## 3 Pass Offside              27.7    852
-    ## 4 Unknown                   28.4   1419
-    ## 5 Injury Clearance          29.6    325
-    ## 6 Out                       33.6   3527
-
-Similarly, the average distance for completed passes is much, much
-shorter, than passes that are not completed.
-
-Our documentation from StatsBomb states that all completed passes have a
-null outcome name, so we input the completed pass value in this step as
-well.
-
 We now create a histogram to look at the shot distance distribution.
 
     hist(shots$shot_distance, breaks = 30, main = "Shot Distance Distribution", xlab = "Distance to Goal (meters)")
 
-![](README_files/figure-markdown_strict/unnamed-chunk-12-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-10-1.png)
 
 Most importantly, the histogram shows how far most shots are taken from
 the goal. We observe a clear peak at shorter distances, indicating that
@@ -442,23 +447,8 @@ many shots come from inside or near the penalty box. However, there are
 also a number of longer-range attempts, suggesting variation in shooting
 strategy across players or teams.
 
-Note: As a special initiative for football fans, StatsBomb released
-large selection of free data for Messi, which partially explains why we
-have far more shots for him than any other player. Data exploration in
-regards to that can be seen in the appendix
-
-We can do the same for the pass distances.
-
-    hist(passes$pass_distance, breaks = 50,
-         main = "Distribution of Pass Distances",
-         xlab = "Pass Distance (meters)",
-         col = "lightblue", border = "white")
-
-![](README_files/figure-markdown_strict/unnamed-chunk-13-1.png)
-
-Let’s plot this over time:
-
-For convenience, we include a trendline using LOESS (Locally Estimated
+Now, let’s look at how shot distances have changed over time. For
+convenience, we include a trendline using LOESS (Locally Estimated
 Scatterplot Smoothing), regression method that captures the underlying
 trend - without assuming a strictly linear relationship.
 
@@ -484,7 +474,7 @@ trend - without assuming a strictly linear relationship.
 
     ## `geom_smooth()` using formula = 'y ~ x'
 
-![](README_files/figure-markdown_strict/unnamed-chunk-14-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-11-1.png)
 
 This plot shows how most shots are not within the penalty or 11m box
 from the goal line. Interestingly, we can see how the shot distance
@@ -493,34 +483,6 @@ have stabilized at around 19 meters, indicating a potential tactical
 equilibrium — where players still attempt long-range shots, but the
 majority of efforts come from a more optimal shooting range. It will be
 interesting to see if we also observe this in our xG model.
-
-The plot for the average distance of passes can also be seen below but
-it is not as meaningful as we only have data for 2 seasons. We can see a
-sharp decrease in distance.
-
-    avg_pass_distance_by_year <- passes %>%
-      group_by(season_name) %>%
-      summarise(
-        avg_pass_distance = mean(pass_distance, na.rm = TRUE),
-        pass_count = n()
-      ) %>%
-      filter(!is.na(season_name))
-
-    ggplot(avg_pass_distance_by_year, aes(x = season_name, y = avg_pass_distance, group = 1)) +
-      geom_line(size = 1.2, color = "darkgreen") +
-      geom_point(size = 2, color = "black") +
-      geom_smooth(method = "loess", se = FALSE, color = "steelblue", linetype = "dashed") +
-      labs(
-        title = "Average Pass Distance Over Time",
-        x = "Season",
-        y = "Average Pass Distance (m)"
-      ) +
-      theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-    ## `geom_smooth()` using formula = 'y ~ x'
-
-![](README_files/figure-markdown_strict/unnamed-chunk-15-1.png)
 
 We will observe this more closely by taking a look at the distribution
 of each year. For this, we create a density plot faceted by season
@@ -540,31 +502,11 @@ below.
         strip.text = element_text(size = 8)
       )
 
-![](README_files/figure-markdown_strict/unnamed-chunk-16-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-12-1.png)
 
 However, the trend is more difficult to observe here. We can see how
 each season has a different pattern/shape and there is no universal rule
 or distribution that applies to all seasons.
-
-    ggplot(passes, aes(x = pass_distance)) +
-      geom_density(fill = "lightblue") +
-      facet_wrap(~season_name) +
-      labs(
-        title = "Distribution of Pass Distances per Season",
-        x = "Pass Distance (m)",
-        y = "Density"
-      ) +
-      theme_minimal() +
-      theme(
-        axis.text.x = element_text(size = 6),
-        strip.text = element_text(size = 8)
-      )
-
-![](README_files/figure-markdown_strict/unnamed-chunk-17-1.png)
-
-For passes on the other hand, it is way more obvious. We can definitely
-see that short passes are more likely in the 2023/2024 season than in
-the 2015/2016 season!
 
 # Section III: Expected Goals Model
 
@@ -883,7 +825,7 @@ probabilities on our unseen testing data.
            y = "Predicted Probability of Scoring") +
       theme_minimal()
 
-![](README_files/figure-markdown_strict/unnamed-chunk-28-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-23-1.png)
 
 Our model clearly illustrates that the predicted goal probability
 decreases exponentially as the shot distance increases.
@@ -1010,7 +952,7 @@ then the team/player has scored less goals than expected.
       ) +
       theme_minimal(base_size = 12)
 
-![](README_files/figure-markdown_strict/unnamed-chunk-30-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-25-1.png)
 
 We can see that only 3 of the 20 Premier League teams overperformed
 their expected goal output in 2015/16. Interestingly enough, Arsenal
@@ -1055,18 +997,18 @@ Now, let’s look at the graph for individual players.
     print(top_overperformers_players)
 
     ## # A tibble: 10 × 7
-    ##    player.name            team_name actual_goals expected_goals shots team_norm goal_diff
-    ##    <chr>                  <chr>            <dbl>          <dbl> <int> <chr>         <dbl>
-    ##  1 Sergio Leonel Agüero … Manchest…           24          17.6    118 Manchest…      6.40
-    ##  2 Riyad Mahrez           Leiceste…           17          12.7     87 Leiceste…      4.28
-    ##  3 Dimitri Payet          West Ham…            9           4.84    69 West Ham…      4.16
-    ##  4 Anthony Martial        Manchest…           11           7.09    57 Manchest…      3.91
-    ##  5 Georginio Wijnaldum    Newcastl…           11           7.21    54 Newcastl…      3.79
-    ##  6 Jamie Vardy            Leiceste…           24          20.2    118 Leiceste…      3.78
-    ##  7 Kelechi Promise Ihean… Manchest…            8           4.34    29 Manchest…      3.66
-    ##  8 Harry Kane             Tottenha…           25          21.4    158 Tottenha…      3.64
-    ##  9 Aaron Lennon           Everton              5           1.83    18 Everton        3.17
-    ## 10 Roberto Firmino Barbo… Liverpool           10           6.88    65 Liverpool      3.12
+    ##    player.name                         team_name         actual_goals expected_goals shots team_norm         goal_diff
+    ##    <chr>                               <chr>                    <dbl>          <dbl> <int> <chr>                 <dbl>
+    ##  1 Sergio Leonel Agüero del Castillo   Manchester City             24          17.6    118 Manchester City        6.40
+    ##  2 Riyad Mahrez                        Leicester City              17          12.7     87 Leicester City         4.28
+    ##  3 Dimitri Payet                       West Ham United              9           4.84    69 West Ham United        4.16
+    ##  4 Anthony Martial                     Manchester United           11           7.09    57 Manchester United      3.91
+    ##  5 Georginio Wijnaldum                 Newcastle United            11           7.21    54 Newcastle United       3.79
+    ##  6 Jamie Vardy                         Leicester City              24          20.2    118 Leicester City         3.78
+    ##  7 Kelechi Promise Iheanacho           Manchester City              8           4.34    29 Manchester City        3.66
+    ##  8 Harry Kane                          Tottenham Hotspur           25          21.4    158 Tottenham Hotspur      3.64
+    ##  9 Aaron Lennon                        Everton                      5           1.83    18 Everton                3.17
+    ## 10 Roberto Firmino Barbosa de Oliveira Liverpool                   10           6.88    65 Liverpool              3.12
 
     # Top 10 underperforming players (most negative goal_diff)
     top_underperformers_players <- player_summary %>%
@@ -1079,18 +1021,18 @@ Now, let’s look at the graph for individual players.
     print(top_underperformers_players)
 
     ## # A tibble: 10 × 7
-    ##    player.name            team_name actual_goals expected_goals shots team_norm goal_diff
-    ##    <chr>                  <chr>            <dbl>          <dbl> <int> <chr>         <dbl>
-    ##  1 Cameron Jerome         Norwich …            3           8.22    49 Norwich …     -5.22
-    ##  2 Shinji Okazaki         Leiceste…            5           9.43    44 Leiceste…     -4.43
-    ##  3 Wilfried Guemiand Bony Manchest…            4           7.93    61 Manchest…     -3.93
-    ##  4 Jesús Navas González   Manchest…            0           3.12    31 Manchest…     -3.12
-    ##  5 Chris Smalling         Manchest…            0           2.97    21 Manchest…     -2.97
-    ##  6 Etienne Capoue         Watford              0           2.80    35 Watford       -2.80
-    ##  7 Oscar dos Santos Embo… Chelsea              3           5.70    51 Chelsea       -2.70
-    ##  8 Moussa Sissoko         Newcastl…            1           3.68    39 Newcastl…     -2.68
-    ##  9 Christian Benteke Lio… Liverpool            9          11.6     64 Liverpool     -2.61
-    ## 10 Aleksandar Mitrović    Newcastl…            9          11.6     80 Newcastl…     -2.61
+    ##    player.name                     team_name         actual_goals expected_goals shots team_norm         goal_diff
+    ##    <chr>                           <chr>                    <dbl>          <dbl> <int> <chr>                 <dbl>
+    ##  1 Cameron Jerome                  Norwich City                 3           8.22    49 Norwich City          -5.22
+    ##  2 Shinji Okazaki                  Leicester City               5           9.43    44 Leicester City        -4.43
+    ##  3 Wilfried Guemiand Bony          Manchester City              4           7.93    61 Manchester City       -3.93
+    ##  4 Jesús Navas González            Manchester City              0           3.12    31 Manchester City       -3.12
+    ##  5 Chris Smalling                  Manchester United            0           2.97    21 Manchester United     -2.97
+    ##  6 Etienne Capoue                  Watford                      0           2.80    35 Watford               -2.80
+    ##  7 Oscar dos Santos Emboaba Júnior Chelsea                      3           5.70    51 Chelsea               -2.70
+    ##  8 Moussa Sissoko                  Newcastle United             1           3.68    39 Newcastle United      -2.68
+    ##  9 Christian Benteke Liolo         Liverpool                    9          11.6     64 Liverpool             -2.61
+    ## 10 Aleksandar Mitrović             Newcastle United             9          11.6     80 Newcastle United      -2.61
 
     # Normalize team names in your team logos lookup table:
     team_logos <- team_logos %>%
@@ -1126,10 +1068,9 @@ Now, let’s look at the graph for individual players.
       ) +
       theme_minimal(base_size = 12)
 
-    ## Warning: ggrepel: 151 unlabeled data points (too many overlaps). Consider increasing
-    ## max.overlaps
+    ## Warning: ggrepel: 151 unlabeled data points (too many overlaps). Consider increasing max.overlaps
 
-![](README_files/figure-markdown_strict/unnamed-chunk-31-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-26-1.png)
 
 Now, we look at the individual player actual vs expected goal tallies.
 Interestingly enough, two of the three players who had the greatest
@@ -1228,7 +1169,7 @@ look at the Spanish La Liga in that same 2015/16 season.
       ) +
       theme_minimal(base_size = 12)
 
-![](README_files/figure-markdown_strict/unnamed-chunk-32-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-27-1.png)
 
 Barcelona and Real Madrid were miles ahead of the rest of the league in
 2015/16! They each scored the most actual goals, while having the two
@@ -1268,18 +1209,18 @@ Now let’s look at the graph for individual players.
     print(top_overperformers_players)
 
     ## # A tibble: 10 × 7
-    ##    player.name            team_name actual_goals expected_goals shots team_norm goal_diff
-    ##    <chr>                  <chr>            <dbl>          <dbl> <int> <chr>         <dbl>
-    ##  1 Luis Alberto Suárez D… Barcelona           40          26.6    139 Barcelona     13.4 
-    ##  2 Gareth Frank Bale      Real Mad…           19           8.45    81 Real Mad…     10.6 
-    ##  3 Antoine Griezmann      Atlético…           22          13.6     92 Atletico…      8.38
-    ##  4 Cristiano Ronaldo dos… Real Mad…           35          28.7    228 Real Mad…      6.31
-    ##  5 Karim Benzema          Real Mad…           24          18.3     98 Real Mad…      5.66
-    ##  6 Imanol Agirretxe Arru… Real Soc…           13           8.65    45 Real Soc…      4.35
-    ##  7 Jozabed Sánchez Ruiz   Rayo Val…            9           4.76    45 Rayo Val…      4.24
-    ##  8 Lucas Pérez Martínez   RC Depor…           17          12.8     98 RC Depor…      4.22
-    ##  9 Cédric Bakambu         Villarre…           12           7.90    49 Villarre…      4.10
-    ## 10 Iñaki Williams Arthuer Athletic…            8           4.02    45 Athletic…      3.98
+    ##    player.name                         team_name              actual_goals expected_goals shots team_norm          goal_diff
+    ##    <chr>                               <chr>                         <dbl>          <dbl> <int> <chr>                  <dbl>
+    ##  1 Luis Alberto Suárez Díaz            Barcelona                        40          26.6    139 Barcelona              13.4 
+    ##  2 Gareth Frank Bale                   Real Madrid                      19           8.45    81 Real Madrid            10.6 
+    ##  3 Antoine Griezmann                   Atlético Madrid                  22          13.6     92 Atletico Madrid         8.38
+    ##  4 Cristiano Ronaldo dos Santos Aveiro Real Madrid                      35          28.7    228 Real Madrid             6.31
+    ##  5 Karim Benzema                       Real Madrid                      24          18.3     98 Real Madrid             5.66
+    ##  6 Imanol Agirretxe Arruti             Real Sociedad                    13           8.65    45 Real Sociedad           4.35
+    ##  7 Jozabed Sánchez Ruiz                Rayo Vallecano                    9           4.76    45 Rayo Vallecano          4.24
+    ##  8 Lucas Pérez Martínez                RC Deportivo La Coruña           17          12.8     98 RC Deportivo La C…      4.22
+    ##  9 Cédric Bakambu                      Villarreal                       12           7.90    49 Villarreal              4.10
+    ## 10 Iñaki Williams Arthuer              Athletic Club                     8           4.02    45 Athletic Club           3.98
 
     # Top 10 underperforming players (most negative goal_diff)
     top_underperformers_players <- player_summary %>%
@@ -1292,18 +1233,18 @@ Now let’s look at the graph for individual players.
     print(top_underperformers_players)
 
     ## # A tibble: 10 × 7
-    ##    player.name            team_name actual_goals expected_goals shots team_norm goal_diff
-    ##    <chr>                  <chr>            <dbl>          <dbl> <int> <chr>         <dbl>
-    ##  1 Álvaro Vázquez García  Getafe               5           9.43    48 Getafe        -4.43
-    ##  2 Carlos Alberto Vela G… Real Soc…            5           8.16    61 Real Soc…     -3.16
-    ##  3 Diego Roberto Godín L… Atlético…            1           3.90    26 Atletico…     -2.90
-    ##  4 Pablo Pérez Rodríguez  Sporting…            0           2.81    18 Sporting…     -2.81
-    ##  5 Rodrigo Moreno Machado Valencia             2           4.78    38 Valencia      -2.78
-    ##  6 Nordin Amrabat         Málaga               0           2.74    28 Malaga        -2.74
-    ##  7 David Barral Torres    Granada              0           2.59    17 Granada       -2.59
-    ##  8 Roger Martí Salvador   Levante …            0           2.51    21 Levante …     -2.51
-    ##  9 Grzegorz Krychowiak    Sevilla              0           2.50    22 Sevilla       -2.50
-    ## 10 Jorge Andújar Moreno   Sevilla              1           3.50    32 Sevilla       -2.50
+    ##    player.name                 team_name       actual_goals expected_goals shots team_norm       goal_diff
+    ##    <chr>                       <chr>                  <dbl>          <dbl> <int> <chr>               <dbl>
+    ##  1 Álvaro Vázquez García       Getafe                     5           9.43    48 Getafe              -4.43
+    ##  2 Carlos Alberto Vela Garrido Real Sociedad              5           8.16    61 Real Sociedad       -3.16
+    ##  3 Diego Roberto Godín Leal    Atlético Madrid            1           3.90    26 Atletico Madrid     -2.90
+    ##  4 Pablo Pérez Rodríguez       Sporting Gijón             0           2.81    18 Sporting Gijon      -2.81
+    ##  5 Rodrigo Moreno Machado      Valencia                   2           4.78    38 Valencia            -2.78
+    ##  6 Nordin Amrabat              Málaga                     0           2.74    28 Malaga              -2.74
+    ##  7 David Barral Torres         Granada                    0           2.59    17 Granada             -2.59
+    ##  8 Roger Martí Salvador        Levante UD                 0           2.51    21 Levante UD          -2.51
+    ##  9 Grzegorz Krychowiak         Sevilla                    0           2.50    22 Sevilla             -2.50
+    ## 10 Jorge Andújar Moreno        Sevilla                    1           3.50    32 Sevilla             -2.50
 
     # Normalize team names in your team logos lookup table:
     team_logos <- team_logos %>%
@@ -1339,10 +1280,9 @@ Now let’s look at the graph for individual players.
       ) +
       theme_minimal(base_size = 12)
 
-    ## Warning: ggrepel: 137 unlabeled data points (too many overlaps). Consider increasing
-    ## max.overlaps
+    ## Warning: ggrepel: 137 unlabeled data points (too many overlaps). Consider increasing max.overlaps
 
-![](README_files/figure-markdown_strict/unnamed-chunk-33-1.png)
+![](README_files/figure-markdown_strict/unnamed-chunk-28-1.png)
 
 As expected from the team graph, 6 of the 10 players who most
 outperformed their expected goal tallies play for Real Madrid or
@@ -1365,14 +1305,12 @@ probabilities.](https://www.frontiersin.org/journals/sports-and-active-living/ar
 
 # Section IV: Conclusion
 
-In this R markdown notebook, we have explored how shooting and passing
-decisions have evolved over time and created our own expected goals
-model. We discovered that the game has evolved, with teams taking a
-lower share of long shots and long passes than we observed 50 years ago.
-Instead, teams have come to favor retaining possession more, playing a
-higher share of short passes and spurning speculative shot attempts in
-favor of working harder to generate higher probability goal-scoring
-opportunities.
+In this R markdown notebook, we have explored how shooting decisions
+have evolved over time and created our own expected goals model. We
+discovered that the game has evolved, with teams taking a lower share of
+long shots than we observed 50 years ago. Instead, teams have come to
+spurn speculative shot attempts in favor of working harder to generate
+higher probability goal-scoring opportunities.
 
 These findings align with the output from our expected goals model. Goal
 probability decreases exponentially the further back a player elects to
@@ -1380,7 +1318,7 @@ shoot from. However, we noticed that the xG model does not account for
 player-specific finishing quality. This is a known limitation of
 classical xG models, which treat all players equally regardless of
 individual skill. Future work could explore these player-specific
-adjustments! Overall, the reduction in average shot and pass distance
-over time, particularly the concentration of shots inside the box in
-recent tournaments has clearly evolved: Football has thus become a much
-more efficient game.
+adjustments! Overall, the reduction in average shot distance over time,
+particularly the concentration of shots inside the box in recent
+tournaments has clearly evolved: Football has thus become a much more
+efficient game.
