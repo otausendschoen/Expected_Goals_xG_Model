@@ -2,4 +2,4 @@
 *.ipynb linguist-detectable=false
 *.R linguist-detectable=true
 *.r linguist-detectable=true
-*.Rmd linguist-detectable=true
+*.Rmd linguist-detectable=false
