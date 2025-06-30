@@ -1,8 +1,8 @@
 # Geospatial Data Science: Building an Expected Goals (xG) Model
 
 **Authors:** Tirdod Behbehani, Oliver Tausendschön, Adrian Alejandro Vacca Bonilla  
-**University**: Barcelona School of Economics
-**Course**: Geospatial Data Science and Economic Spatial Models
+**University:** Barcelona School of Economics  
+**Course:** Geospatial Data Science and Economic Spatial Models  
 **Date:** March 24, 2025
 
 # Introduction
