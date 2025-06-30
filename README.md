@@ -24,9 +24,7 @@ Ultimately, our goal is to test the hypothesis that closer shots have a
 higher chance of resulting in goals, and to see whether this insight is
 reflected in trends over time. In other words: are teams becoming more
 conservative, favoring high-probability chances over long-range efforts?
-In the end, we might see this being reflected in our xG model. The code
-for this project can also be found on
-[GitHub](https://github.com/otausendschoen/Football_Analysis).
+In the end, we might see this being reflected in our xG model. 
 
 # Section I: Set Up Data & Libraries
 
