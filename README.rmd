@@ -125,9 +125,6 @@ Before addressing our research question, we shall do some some preliminary data 
 # View column names
 colnames(shots_df)
 
-# Glimpse the structure of the data
-glimpse(shots_df)
-
 # Get number of rows and columns
 dim(shots_df)
 
