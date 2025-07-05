@@ -20,11 +20,10 @@ provides detailed event-level information on what occurred on the pitch.
 We have this data across 13 competitions for a wide timeframe, from 1958
 to 2024.
 
-Ultimately, our goal is to test the hypothesis that closer shots have a
-higher chance of resulting in goals, and to see whether this insight is
-reflected in trends over time. In other words: are teams becoming more
-conservative, favoring high-probability chances over long-range efforts?
-In the end, we might see this being reflected in our xG model. 
+Ultimately, our objective is to see if just using a few simple features (ex. 
+shot distance, shot angle to the goal, whether the shot was taken
+under pressure) can adequately predict the chance of a given shot
+resulting in a goal.
 
 # Section I: Set Up Data & Libraries
 
