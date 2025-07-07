@@ -13,21 +13,19 @@ project, we set out to explore how football shots have evolved over
 time, and whether we could build our own expected goals (xG) model. xG models
 estimate the probability of a given shot resulting in a goal.
 
-To do this, we use open-access data provided by StatsBomb. For each
-event in a match (like a shot, pass, dribble, save, or duel), StatsBomb
-provides detailed event-level information on what occurred on the pitch.
-We have this data across 13 competitions for a wide timeframe, from 1958
-to 2024.
+To do this, we use open-access data provided by StatsBomb in the StatsBombR package. 
+StatsBombR provides detailed event-level information (ex. shots, passes dribbles, duels)
+on what occurred on the pitch. We have this data across 13 major men's competitions for 
+a wide timeframe, from 1958 to 2024. Our raw StatsBomb data rendered us with 70,553 shot observations and 121 features.
 
-Ultimately, our objective is to see if just using a few simple features (ex. 
-shot distance, shot angle to the goal, whether the shot was taken
-under pressure) can adequately predict the chance of a given shot
-resulting in a goal.
+# Motivation
 
-For this project, we will rely on the package StatsBombR. This package
-gives us access to detailed, event-level football data — including
-passes, shots, dribbles, and more — from professional matches around the
-world. Our raw StatsBomb data rendered us with 70,553 shot observations and 121 features.
+Understanding xG probabilities provides valuable context in football analysis. 
+Raw goal totals can be influenced by factors such as finishing ability, goalkeeper performance, or luck.
+xG, however, estimates the probability of a given shot resulting in a goal based on the shot quality.
+Comparing actual goals allows us to evaluate performance from a more objective process-oriented lens. 
+Furthermore, xG provides data-driven evidence to whether a team/player is over or underperforming relative to its expected 
+goal output, rendering a more sustainable viewpoint of performance over time.
 
 # Results
 
@@ -52,7 +50,7 @@ teams and players.
       <th>Team</th>
       <th>Actual Goals</th>
       <th>Expected Goals</th>
-      <th>Goal Diff</th>
+      <th>Goal Difference</th>
     </tr>
   </thead>
   <tbody>
@@ -77,7 +75,7 @@ teams and players.
       <th>Team</th>
       <th>Actual Goals</th>
       <th>Expected Goals</th>
-      <th>Goal Diff</th>
+      <th>Goal Difference</th>
     </tr>
   </thead>
   <tbody>
@@ -102,9 +100,9 @@ then the team/player has scored less goals than expected.
 
 ![](README_files/figure-markdown_strict/unnamed-chunk-25-1.png)
 
-We can see that only 3 of the 20 Premier League teams overperformed
+We can see that only 4 of the 20 Premier League teams overperformed
 their expected goal output in 2015/16. Arsenal, who finished in 2nd place,
-underperformed their expected goal output by a whopping 14 goals.
+underperformed their expected goal output by 10 goals.
 If Arsenal had been more clinical in front of goal, it likely
 would have had a real shot at the title. Following the 2015/16 season,
 Arsenal made it a point of emphasis to sign a new striker. Arsenal
@@ -124,7 +122,7 @@ actual and expected goals.
       <th>Team</th>
       <th>Actual Goals</th>
       <th>Expected Goals</th>
-      <th>Goal Diff</th>
+      <th>Goal Difference</th>
     </tr>
   </thead>
   <tbody>
@@ -150,7 +148,7 @@ actual and expected goals.
       <th>Team</th>
       <th>Actual Goals</th>
       <th>Expected Goals</th>
-      <th>Goal Diff</th>
+      <th>Goal Difference</th>
     </tr>
   </thead>
   <tbody>
@@ -167,10 +165,10 @@ actual and expected goals.
   </tbody>
 </table>
 
-Interestingly enough, two of the three players who had the greatest
+Interestingly enough, two of the six players who had the greatest
 overperformance in front of goal were Leicester City’s Riyad Mahrez and
-Jamie Vardy. Mahrez scored 17 goals from 10.4 expected goals, while
-Vardy scored 24 goals from 18.6 expected goals. 
+Jamie Vardy. Mahrez scored 17 goals from 12.7 expected goals, while
+Vardy scored 24 goals from 20.2 expected goals. 
 
 This overperformance in front of goal powered Leicester City to win the Premier League title
 despite being 5000-1 underdogs at the start of the season. As our
@@ -188,18 +186,18 @@ analyze the Spanish La Liga in that same 2015/16 season.
       <th>Team</th>
       <th>Actual Goals</th>
       <th>Expected Goals</th>
-      <th>Goal Diff</th>
+      <th>Goal Difference</th>
     </tr>
   </thead>
   <tbody>
-    <tr><td>Real Madrid</td><td>108.0</td><td>81.6</td><td>26.4</td></tr>
-    <tr><td>Barcelona</td><td>109.0</td><td>94.1</td><td>14.9</td></tr>
-    <tr><td>Atlético Madrid</td><td>62.0</td><td>53.5</td><td>8.5</td></tr>
-    <tr><td>Villarreal</td><td>42.0</td><td>35.5</td><td>6.5</td></tr>
-    <tr><td>Granada</td><td>45.0</td><td>40.9</td><td>4.1</td></tr>
-    <tr><td>Athletic Club</td><td>57.0</td><td>53.8</td><td>3.2</td></tr>
-    <tr><td>Las Palmas</td><td>42.0</td><td>39.3</td><td>2.7</td></tr>
-    <tr><td>Celta Vigo</td><td>51.0</td><td>49.8</td><td>1.2</td></tr>
+    <tr><td>Real Madrid</td><td>108.0</td><td>81.6</td><td>+26.4</td></tr>
+    <tr><td>Barcelona</td><td>109.0</td><td>94.1</td><td>+14.9</td></tr>
+    <tr><td>Atlético Madrid</td><td>62.0</td><td>53.5</td><td>+8.5</td></tr>
+    <tr><td>Villarreal</td><td>42.0</td><td>35.5</td><td>+6.5</td></tr>
+    <tr><td>Granada</td><td>45.0</td><td>40.9</td><td>+4.1</td></tr>
+    <tr><td>Athletic Club</td><td>57.0</td><td>53.8</td><td>+3.2</td></tr>
+    <tr><td>Las Palmas</td><td>42.0</td><td>39.3</td><td>+2.7</td></tr>
+    <tr><td>Celta Vigo</td><td>51.0</td><td>49.8</td><td>+1.2</td></tr>
     <tr><td>RC Deportivo La Coruña</td><td>41.0</td><td>43.0</td><td>-2.0</td></tr>
     <tr><td>Rayo Vallecano</td><td>52.0</td><td>55.1</td><td>-3.1</td></tr>
   </tbody>
@@ -213,7 +211,7 @@ analyze the Spanish La Liga in that same 2015/16 season.
       <th>Team</th>
       <th>Actual Goals</th>
       <th>Expected Goals</th>
-      <th>Goal Diff</th>
+      <th>Goal Difference</th>
     </tr>
   </thead>
   <tbody>
@@ -248,20 +246,20 @@ actual and expected goals.
       <th>Team</th>
       <th>Actual Goals</th>
       <th>Expected Goals</th>
-      <th>Goal Diff</th>
+      <th>Goal Difference</th>
     </tr>
   </thead>
   <tbody>
-    <tr><td>Luis Alberto Suárez Díaz</td><td>Barcelona</td><td>40.0</td><td>26.6</td><td>13.4</td></tr>
-    <tr><td>Gareth Frank Bale</td><td>Real Madrid</td><td>19.0</td><td>8.5</td><td>10.6</td></tr>
-    <tr><td>Antoine Griezmann</td><td>Atlético Madrid</td><td>22.0</td><td>13.6</td><td>8.4</td></tr>
-    <tr><td>Cristiano Ronaldo dos Santos Aveiro</td><td>Real Madrid</td><td>35.0</td><td>28.7</td><td>6.3</td></tr>
-    <tr><td>Karim Benzema</td><td>Real Madrid</td><td>24.0</td><td>18.3</td><td>5.7</td></tr>
-    <tr><td>Imanol Agirretxe Arruti</td><td>Real Sociedad</td><td>13.0</td><td>8.7</td><td>4.3</td></tr>
-    <tr><td>Jozabed Sánchez Ruiz</td><td>Rayo Vallecano</td><td>9.0</td><td>4.8</td><td>4.2</td></tr>
-    <tr><td>Lucas Pérez Martínez</td><td>RC Deportivo La Coruña</td><td>17.0</td><td>12.8</td><td>4.2</td></tr>
-    <tr><td>Cédric Bakambu</td><td>Villarreal</td><td>12.0</td><td>7.9</td><td>4.1</td></tr>
-    <tr><td>Iñaki Williams Arthuer</td><td>Athletic Club</td><td>8.0</td><td>4.0</td><td>4.0</td></tr>
+    <tr><td>Luis Alberto Suárez Díaz</td><td>Barcelona</td><td>40.0</td><td>26.6</td><td>+13.4</td></tr>
+    <tr><td>Gareth Frank Bale</td><td>Real Madrid</td><td>19.0</td><td>8.5</td><td>+10.6</td></tr>
+    <tr><td>Antoine Griezmann</td><td>Atlético Madrid</td><td>22.0</td><td>13.6</td><td>+8.4</td></tr>
+    <tr><td>Cristiano Ronaldo dos Santos Aveiro</td><td>Real Madrid</td><td>35.0</td><td>28.7</td><td>+6.3</td></tr>
+    <tr><td>Karim Benzema</td><td>Real Madrid</td><td>24.0</td><td>18.3</td><td>+5.7</td></tr>
+    <tr><td>Imanol Agirretxe Arruti</td><td>Real Sociedad</td><td>13.0</td><td>8.7</td><td>+4.3</td></tr>
+    <tr><td>Jozabed Sánchez Ruiz</td><td>Rayo Vallecano</td><td>9.0</td><td>4.8</td><td>+4.2</td></tr>
+    <tr><td>Lucas Pérez Martínez</td><td>RC Deportivo La Coruña</td><td>17.0</td><td>12.8</td><td>+4.2</td></tr>
+    <tr><td>Cédric Bakambu</td><td>Villarreal</td><td>12.0</td><td>7.9</td><td>+4.1</td></tr>
+    <tr><td>Iñaki Williams Arthuer</td><td>Athletic Club</td><td>8.0</td><td>4.0</td><td>+4.0</td></tr>
   </tbody>
 </table>
 
@@ -274,7 +272,7 @@ actual and expected goals.
       <th>Team</th>
       <th>Actual Goals</th>
       <th>Expected Goals</th>
-      <th>Goal Diff</th>
+      <th>Goal Difference</th>
     </tr>
   </thead>
   <tbody>
@@ -318,9 +316,11 @@ will regress to the mean.
 
 This conundrum limits the predictive power of simple expected goals models, as
 they are designed to analyze historical performance and not meant to be
-predictive. [However, there are experimental approaches that use
+too predictive. [There are experimental approaches that use
 Bayesian methodologies to explore the influence of a particular player
 or position on predicting goal
-probabilities.](https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2024.1348983/full)
+probabilities.](https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2024.1348983/full).
+Fine-tuning xG models to become more predictive can be extremely valuable to football clubs
+in evaluating future projected goalscoring outputs.
 
 
