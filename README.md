@@ -319,7 +319,7 @@ they are designed to analyze historical performance and not meant to be
 too predictive. [There are experimental approaches that use
 Bayesian methodologies to explore the influence of a particular player
 or position on predicting goal
-probabilities.](https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2024.1348983/full).
+probabilities](https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2024.1348983/full).
 Fine-tuning xG models to become more predictive can be extremely valuable to football clubs
 in evaluating future projected goalscoring outputs.
 
